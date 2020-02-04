@@ -16,10 +16,10 @@ We recommend using the Anaconda distribution of Python 3 which installs all the 
 
 ## Usage
 
-*Data Preparation*
+### Data Preparation
 
-*Model Training*
+### Model Training
 
-*Model Validation*
+### Model Validation
 
-*Map Production*
+### Map Production
