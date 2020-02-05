@@ -31,4 +31,4 @@ UAV2SEN_FuzzyDNN, UAV2SEN_FuzzyRF, UAV2SEN_FuzzyCNN will train the appropriate m
 UAV2SEN.FuzzyValidation will validate any of the trained predictors against grount truth data also included in the sample dataset.  
 
 ### Map Production
-UAV2SEN_FuzzyCNN_QGIS is coded to run in the Python console of QGIS.  Scripts were tested under QGIS 3.4 long term release. Keras, Tensorflow and Scikit-Image must also be installed in the python 3 environment of QGIS.  This script will then train the CNN model and calculate a fuzzy classification for a user-specified image.  The result will be 3 seperate raster outputs containing the membership % for clases of water, vegetation and dry sediment.
+UAV2SEN_FuzzyCNN_QGIS is coded to run in the Python console of QGIS.  Scripts were tested under QGIS 3.4 long term release. Keras, Tensorflow and Scikit-Image must also be installed in the python 3 environment of QGIS.  This script will train the CNN model and calculate a fuzzy classification for a user-specified image.  The result will be 3 seperate raster outputs containing the membership % for classes of water, vegetation and dry sediment.
