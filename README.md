@@ -10,8 +10,9 @@ The methods described here use low-altitude UAV orthoimagery in order to train f
 3. Feather
 4. Scikit-Learn
 5. Scikit-Image
-6. Pandas
-7. Seaborn
+6. Rasterio
+7. Pandas
+8. Seaborn
 
 We recommend using the Anaconda distribution of Python 3 which installs all the needed libraries except Feather, Keras and Tensorflow.
 
