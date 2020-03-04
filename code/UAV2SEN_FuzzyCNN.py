@@ -23,7 +23,7 @@ from sklearn.model_selection import train_test_split
 """User data input. Fill in the info below before running"""
 #############################################################
 
-
+# Edit this section to have as many inputs as the number of times you ran UAV2SEN_MakeFuzzyTensor
 Train1 = np.load('F:\\MixClass\\SesiaCarr_T.npy')
 Label1 = np.load('F:\\MixClass\\SesiaCarr_L.npy')
 
@@ -44,11 +44,11 @@ TrainLabel = np.concatenate([Label1,Label2, Label3, Label4], axis=0)
 
 '''BASIC PARAMETER CHOICES'''
 
-TrainingEpochs = 150 #For NN only
+TrainingEpochs = 150 #For NN training
 Nfilters=36
 TTS = 0.0001 #Train test split fraction in test.  Keep to 10E-4 if not using
 NClasses = 3  #The number of end members in the fuzzy class
-
+inShape = (5,5,11) #adjust this to the template size in X, Y and number of bands
 '''MODEL PARAMETERS''' #These would usually not be edited
  
 Ndims = TrainData.shape[3] # Feature Dimensions. 4 if using entropy in phase 2, 3 if just RGB
@@ -63,7 +63,7 @@ NAF = 'relu' #Neural network Activation Function
    
 
 Estimator = Sequential()
-Estimator.add(Conv2D(Nfilters,5, data_format='channels_last', input_shape=(5,5,11), activation=NAF))
+Estimator.add(Conv2D(Nfilters,5, data_format='channels_last', input_shape=inShape, activation=NAF))
 Estimator.add(Flatten())
 Estimator.add(Dense(64, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
 Estimator.add(BatchNormalization(axis=-1, momentum=0.99, epsilon=0.001, center=True, scale=True, beta_initializer='zeros', gamma_initializer='ones', moving_mean_initializer='zeros', moving_variance_initializer='ones', beta_regularizer=None, gamma_regularizer=None, beta_constraint=None, gamma_constraint=None))
