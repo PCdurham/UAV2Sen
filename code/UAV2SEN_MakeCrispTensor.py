@@ -239,7 +239,7 @@ for s in range(len(SiteDF.Site)):
     LabelDF = pd.DataFrame(data=labels, columns=['RelMajClass','MajClass','PureClass','PolyClass','Month','Year','Site'])
     #add the labels and membership to a DF for export
     for t in range(0, Ti.shape[0]):
-        LabelDF.RelMajClass[t]=-1 #this flags the fact that this part does not compute polygon classes
+        LabelDF.RelMajClass[t]=-1 #this flags the fact that this part does not classes from the UAV data
         LabelDF.MajClass[t]=-1
         LabelDF.PureClass[t]=-1
         LabelDF.PolyClass[t]=Tl[t,middle,middle,0].reshape(1,-1) 
