@@ -191,8 +191,8 @@ EstimatorNN.fit(X_train, y_train, batch_size=1000, epochs=TrainingEpochs, valida
 PredictedPixels = EstimatorNN.predict(X_test)
 
 # #Produce TTS classification reports 
-y_test = np.argmax(y_test)
-PredictedPixels = np.argmax(PredictedPixels)
+y_test=np.argmax(y_test, axis=1)
+# PredictedPixels 
 report = metrics.classification_report(y_test, PredictedPixels, digits = 3)
 print('20% Test classification results for ')
 print(report)
