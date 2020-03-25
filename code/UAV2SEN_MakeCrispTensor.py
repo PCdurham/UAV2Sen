@@ -7,7 +7,7 @@ __copyright__ = '(c) Patrice Carbonneau'
 __license__ = 'MIT'
 
 ''' This routine compiles sentinel data (preferably cropped) and 
-UAV high resolution class rasters and creates tensors suitable for CNN work.
+UAV high resolution class rasters and creates tensors suitable for DNN work.
 saves a tensor and label vector in npy format
 '''
 
@@ -28,21 +28,16 @@ import rasterio
 
 SiteList = 'F:\\SiteList.csv'#this has the lists of sites with name, month and year
 DatFolder = 'F:\\FinalTif\\' #location of above
-#
-SiteDF = pd.read_csv(SiteList)
 
-Set = 1 # 1 is all bands, 2 is 3,4,8 and 3 is 9,10,11 
-
-#
-
-
-#tile size and associated index of middle pixel
+#tile size 
 size=5
-middle=2
+
 
 #Output location
 Outfile = 'F:\\MLdata\\NNdebug' #no extensions needed, added later
 
+
+###############################################################################
 '''Functions'''
 def map2pix(rasterfile,xmap,ymap):
     with rasterio.open(rasterfile) as map_layer:
@@ -64,11 +59,11 @@ def GetCrispClass(CLS, UL, LR):
         if (np.min(c)>0):#no UAV class pixels as no data. 10x10m area of S2 pixel is 100% classified
     
             if np.max(counts)>=(0.95*np.sum(counts)):#pure class
-                ClassOut[0,0,2]=c[np.argmax(counts)]+1
+                ClassOut[0,0,2]=c[np.argmax(counts)]
             if np.max(counts)>=(0.5*np.sum(counts)):#majority class
-                ClassOut[0,0,1]=c[np.argmax(counts)]+1
-            if np.max(counts)>=(np.sum(counts)/3):#relative majority class, assumes a 3 class problem
-                ClassOut[0,0,0]=c[np.argmax(counts)]+1
+                ClassOut[0,0,1]=c[np.argmax(counts)]
+            if np.max(counts)>(np.sum(counts)/3):#relative majority class, assumes a 3 class problem
+                ClassOut[0,0,0]=c[np.argmax(counts)]
         else:
             ClassOut[0,0,0] = -1 #this flags a spot with no data
 
@@ -125,8 +120,17 @@ def slide_rasters_to_tiles(im, CLS, size):
             B+=1
 
     return TileTensor, LabelTensor
-
+############################################################################################
 '''Main processing'''
+#load the site list
+SiteDF = pd.read_csv(SiteList)
+
+#Tile size
+if size%2 != 0:
+    middle=size//2
+else:
+    raise Exception('Tile size of '+str(size)+ ' is even and not valid. Please choose an odd tile size')
+
 #initialise the main outputs with Relative majority, Majority and Pure class and Poygon class cases
 MasterLabelDict = {'RelMajClass':0,'MajClass':0,'PureClass':0,'PolyClass':0,'Month':0,'Year':0,'Site':'none'}
 MasterLabelDF = pd.DataFrame(data=MasterLabelDict, index=[0])
