@@ -134,10 +134,8 @@ else:
 #initialise the main outputs with Relative majority, Majority and Pure class and Poygon class cases
 MasterLabelDict = {'RelMajClass':0,'MajClass':0,'PureClass':0,'PolyClass':0,'Month':0,'Year':0,'Site':'none'}
 MasterLabelDF = pd.DataFrame(data=MasterLabelDict, index=[0])
-if Set ==1:
-    MasterTensor = np.zeros((1,size,size,12))
-else:
-    MasterTensor = np.zeros((1,size,size,3))
+MasterTensor = np.zeros((1,size,size,12))
+
     
 ''''Pass 1: UAV classes'''
 
