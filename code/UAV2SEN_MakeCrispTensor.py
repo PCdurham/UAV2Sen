@@ -64,11 +64,11 @@ def GetCrispClass(CLS, UL, LR):
         if (np.min(c)>0):#no UAV class pixels as no data. 10x10m area of S2 pixel is 100% classified
     
             if np.max(counts)>=(0.95*np.sum(counts)):#pure class
-                ClassOut[0,0,2]=np.argmax(counts)+1
+                ClassOut[0,0,2]=c[np.argmax(counts)]+1
             if np.max(counts)>=(0.5*np.sum(counts)):#majority class
-                ClassOut[0,0,1]=np.argmax(counts)+1
+                ClassOut[0,0,1]=c[np.argmax(counts)]+1
             if np.max(counts)>=(np.sum(counts)/3):#relative majority class, assumes a 3 class problem
-                ClassOut[0,0,0]=np.argmax(counts)+1
+                ClassOut[0,0,0]=c[np.argmax(counts)]+1
         else:
             ClassOut[0,0,0] = -1 #this flags a spot with no data
 
