@@ -35,7 +35,7 @@ FeatureSet = ['B1','B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12'] # 
 
 
 
-'''Load the tensors and filter out the required training and validation data.'''
+'''Load the tensors, squeeze to get single pixel values and filter out the required training and validation data.'''
 TensorFileName = MainData+'__crisp_T.npy'
 LabelFileName = MainData+'__crisp_L.dat'
 
@@ -55,7 +55,7 @@ MasterLabelDF.index = range(0,len(MasterLabelDF.RelMajClass))
 #Subsample the tensor
 Tensor = np.compress(Valid, Tensor, axis=0)
 
-#get the central pixels in the tensor to transform this into pixel-based data for the NN
+#get the central pixels in the tensor to transform this into pixel-based data for the non-convolutional NN
 Middle = Tensor.shape[1]//2
 PixelData = np.squeeze(Tensor[:,Middle, Middle,:])
 PixelDF = pd.DataFrame(data=PixelData, columns=['B1','B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12'])
