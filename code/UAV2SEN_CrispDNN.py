@@ -15,6 +15,7 @@ import pandas as pd
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, BatchNormalization
 from tensorflow.keras.wrappers.scikit_learn import KerasClassifier
+from tensorflow.keras.utils import to_categorical
 from sklearn import metrics
 from sklearn.model_selection import train_test_split
 
@@ -36,8 +37,8 @@ FeatureSet = ['B1','B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12'] # 
 
 
 '''Load the tensors, squeeze to get single pixel values and filter out the required training and validation data.'''
-TensorFileName = MainData+'__crisp_T.npy'
-LabelFileName = MainData+'__crisp_L.dat'
+TensorFileName = MainData+'_crisp_T.npy'
+LabelFileName = MainData+'_crisp_L.dat'
 
 SiteDF = pd.read_csv(SiteList)
 Tensor = np.load(TensorFileName)
@@ -164,14 +165,14 @@ def nodrop_model_L2D():
     
     model.add(Dense(32, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation='relu'))
     model.add(Dense(16, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation='relu'))
-    model.add(Dense(NClasses, kernel_initializer='normal', activation='linear'))
+    model.add(Dense(NClasses+1, kernel_initializer='normal', activation='linear'))
     
     
     #Tune an optimiser
     Optim = optimizers.Adam(lr=LearningRate, beta_1=0.9, beta_2=0.999, decay=0.0, amsgrad=True)
     
     # Compile model
-    model.compile(loss='sparse_categorical_crossentropy', optimizer=Optim, metrics = ['accuracy'])
+    model.compile(loss='categorical_crossentropy', optimizer=Optim, metrics = ['accuracy'])
     return model
     
 EstimatorNN = KerasClassifier(build_fn=nodrop_model_L2D, epochs=TrainingEpochs, batch_size=1000, verbose=Chatty)
@@ -179,16 +180,19 @@ EstimatorNN = KerasClassifier(build_fn=nodrop_model_L2D, epochs=TrainingEpochs, 
   
 ###############################################################################
 """Data Fitting"""
- 
-X_train, X_test, y_train, y_test = train_test_split(TrainFeatures, TrainLabels, test_size=0.2, random_state=42)
+TrainLabels1Hot = to_categorical(TrainLabels)
+ValidationLabels1Hot = to_categorical(ValidationLabels)
+X_train, X_test, y_train, y_test = train_test_split(TrainFeatures, TrainLabels1Hot, test_size=0.2, random_state=42)
 print('Fitting MLP Classifier on ' + str(len(X_train)) + ' pixels')
-EstimatorNN.fit(X_train, y_train, batch_size=1000, epochs=TrainingEpochs, validation_data=(ValidationFeatures, ValidationLabels), verbose=Chatty)#, class_weight=weights)
+EstimatorNN.fit(X_train, y_train, batch_size=1000, epochs=TrainingEpochs, validation_data=(ValidationFeatures, ValidationLabels1Hot), verbose=Chatty)#, class_weight=weights)
 
     
 #Fit the predictor to test pixels
 PredictedPixels = EstimatorNN.predict(X_test)
 
 # #Produce TTS classification reports 
+y_test = np.argmax(y_test)
+PredictedPixels = np.argmax(PredictedPixels)
 report = metrics.classification_report(y_test, PredictedPixels, digits = 3)
 print('20% Test classification results for ')
 print(report)
