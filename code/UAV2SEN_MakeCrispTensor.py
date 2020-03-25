@@ -276,8 +276,8 @@ MasterLabelDF.index = range(0,len(MasterLabelDF.RelMajClass))
 
 
 #export to feather for the DF and numpy for the tensor
-OutTrain = Outfile +'__crisp_T.npy'
-OutLabel =  Outfile+'__crisp_L.dat'   
+OutTrain = Outfile +'_crisp_T.npy'
+OutLabel =  Outfile+'_crisp_L.dat'   
 np.save(OutTrain, MasterTensor)
 MasterLabelDF.to_feather(OutLabel)
 
