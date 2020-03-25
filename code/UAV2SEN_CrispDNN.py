@@ -25,7 +25,7 @@ from sklearn.model_selection import train_test_split
 """User data input. Use the site template and list training and validation choices"""
 #############################################################
 MainData = 'F:\\MLdata\\NNdebug'  #no extensions, will be fleshed out below
-SiteList = 'F:\\SiteList.csv'#this has the lists of sites with name, month and year
+SiteList = 'F:\\SiteList.csv'#this has the lists of sites with name, month, year and 1s and 0s to identify training and validation sites
 DatFolder = 'F:\\FinalTif\\' #location of above
 TrainingEpochs = 150 #Typically this can be reduced
 UAV = True #if true the crisp class will run with the UAV based classifications crisped up to majorities.  If false, use desk-based polygons
@@ -43,7 +43,7 @@ SiteDF = pd.read_csv(SiteList)
 Tensor = np.load(TensorFileName)
 MasterLabelDF=pd.read_feather(LabelFileName)
 
-#Remove the 4X data augmentation and take only points 1,4,8,etc...
+#Remove the 4X data augmentation only relevant to the CNNs and take only points 0,4,8,etc...
 PointNums = np.asarray(range(0,len(MasterLabelDF.RelMajClass)))
 Spots = PointNums%4
 Valid = Spots==0
@@ -174,8 +174,7 @@ def nodrop_model_L2D():
     model.compile(loss='sparse_categorical_crossentropy', optimizer=Optim, metrics = ['accuracy'])
     return model
     
-EstimatorNN = KerasClassifier(build_fn=nodrop_model_L2D, epochs=TrainingEpochs, 
-                                  batch_size=1000, verbose=Chatty)
+EstimatorNN = KerasClassifier(build_fn=nodrop_model_L2D, epochs=TrainingEpochs, batch_size=1000, verbose=Chatty)
 
   
 ###############################################################################
@@ -183,7 +182,7 @@ EstimatorNN = KerasClassifier(build_fn=nodrop_model_L2D, epochs=TrainingEpochs,
  
 X_train, X_test, y_train, y_test = train_test_split(TrainFeatures, TrainLabels, test_size=0.2, random_state=42)
 print('Fitting MLP Classifier on ' + str(len(X_train)) + ' pixels')
-EstimatorNN.fit(X_train, y_train, batch_size=1000, epochs=TrainingEpochs, verbose=Chatty)#, class_weight=weights)
+EstimatorNN.fit(X_train, y_train, batch_size=1000, epochs=TrainingEpochs, validation_data=(ValidationFeatures, ValidationLabels), verbose=Chatty)#, class_weight=weights)
 
     
 #Fit the predictor to test pixels
