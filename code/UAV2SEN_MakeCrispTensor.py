@@ -26,8 +26,8 @@ import rasterio
 """Inputs"""
 #############################################################
 
-SiteList = 'E:\\UAV2SEN\\DebugList.csv'#this has the lists of sites with name, month and year
-DatFolder = 'E:\\UAV2SEN\\Debug\\' #location of above
+SiteList = 'F:\\SiteList.csv'#this has the lists of sites with name, month and year
+DatFolder = 'F:\\FinalTif\\' #location of above
 #
 SiteDF = pd.read_csv(SiteList)
 
@@ -41,7 +41,7 @@ size=5
 middle=2
 
 #Output location
-Outfile = 'E:\\UAV2SEN\\MLdata\\test3' #no extensions needed, added later
+Outfile = 'F:\\MLdata\\NNdebug' #no extensions needed, added later
 
 '''Functions'''
 def map2pix(rasterfile,xmap,ymap):
@@ -61,13 +61,16 @@ def GetCrispClass(CLS, UL, LR):
     c,counts = np.unique(Spot, return_counts=True)
     
     if len(c)>0:
+        if (np.min(c)>0):#no UAV class pixels as no data. 10x10m area of S2 pixel is 100% classified
     
-        if np.max(counts)>=(0.95*np.sum(counts)):
-            ClassOut[0,0,2]=np.argmax(counts)+1
-        if np.max(counts)>=(0.5*np.sum(counts)):
-            ClassOut[0,0,1]=np.argmax(counts)+1
-        if np.max(counts)>=(np.sum(counts)/3):
-            ClassOut[0,0,0]=np.argmax(counts)+1
+            if np.max(counts)>=(0.95*np.sum(counts)):#pure class
+                ClassOut[0,0,2]=np.argmax(counts)+1
+            if np.max(counts)>=(0.5*np.sum(counts)):#majority class
+                ClassOut[0,0,1]=np.argmax(counts)+1
+            if np.max(counts)>=(np.sum(counts)/3):#relative majority class, assumes a 3 class problem
+                ClassOut[0,0,0]=np.argmax(counts)+1
+        else:
+            ClassOut[0,0,0] = -1 #this flags a spot with no data
 
     else:
         ClassOut[0,0,0] = -1 #this flags a spot with no data
@@ -75,11 +78,11 @@ def GetCrispClass(CLS, UL, LR):
                     
     return ClassOut
 
-def MakeCrispClass(S2Name, UAVClassName):
+def MakeCrispClass(S2Name, UAVClassName, CLS_UAV):
     S2 = io.imread(S2Name)
     w = S2.shape[0]
     h = S2.shape[1] 
-    CLS_UAV = io.imread(UAVClassName)
+
     CrispClass = np.zeros((w,h,3))
     for W in range(w):
         
@@ -93,20 +96,30 @@ def MakeCrispClass(S2Name, UAVClassName):
 
 
 def slide_rasters_to_tiles(im, CLS, size):
-    
-    di=im.shape[2]
-    dc =CLS.shape[2]
     h=im.shape[0]
     w=im.shape[1]
+    di=im.shape[2]
+    try:
+        dc =CLS.shape[2]
+        LabelTensor = np.zeros(((h-size)*(w-size), size,size,dc))
+    except:
+         dc=1
+         LabelTensor = np.zeros(((h-size)*(w-size), size,size))
+
 
 
 
     TileTensor = np.zeros(((h-size)*(w-size), size,size,di))
     LabelTensor = np.zeros(((h-size)*(w-size), size,size,dc))
+    
     B=0
     for y in range(0, h-size):
         for x in range(0, w-size):
-            LabelTensor[B] = CLS[y:y+size,x:x+size,:].reshape(size,size,dc)
+            if dc>1:
+                LabelTensor[B] = CLS[y:y+size,x:x+size,:].reshape(size,size,dc)
+            else:
+                LabelTensor[B] = CLS[y:y+size,x:x+size].reshape(size,size,1)
+                
 
             TileTensor[B,:,:,:] = im[y:y+size,x:x+size,:].reshape(size,size,di)
             B+=1
@@ -114,7 +127,7 @@ def slide_rasters_to_tiles(im, CLS, size):
     return TileTensor, LabelTensor
 
 '''Main processing'''
-#initialise the main outputs
+#initialise the main outputs with Relative majority, Majority and Pure class and Poygon class cases
 MasterLabelDict = {'RelMajClass':0,'MajClass':0,'PureClass':0,'PolyClass':0,'Month':0,'Year':0,'Site':'none'}
 MasterLabelDF = pd.DataFrame(data=MasterLabelDict, index=[0])
 if Set ==1:
@@ -128,6 +141,7 @@ else:
     
 #run through the sites in the DF and extract the data
 for s in range(len(SiteDF.Site)):
+    print('Processing '+SiteDF.Site[s]+' '+str(SiteDF.Month[s])+' '+str(SiteDF.Year[s]))
     # Getting the data
     S2Image = DatFolder+SiteDF.Abbrev[s]+'_'+str(SiteDF.Month[s])+'_'+str(SiteDF.Year[s])+'_S2.tif'
     I1=io.imread(S2Image)
@@ -141,9 +155,12 @@ for s in range(len(SiteDF.Site)):
         Isubset = I1[:,:,9:12]
         
             
-    ClassUAV = DatFolder+SiteDF.Abbrev[s]+'_'+str(SiteDF.Month[s])+'_'+str(SiteDF.Year[s])+'_UAVCLS.tif'
-    #get both UAV class and S2 class and produce the fuzzy classification
-    Ccrisp1 = MakeCrispClass(S2Image, ClassUAV)
+    #get both UAV class and S2 class and produce the fuzzy classification on the S2 image dimensions
+      
+    ClassUAVName = DatFolder+SiteDF.Abbrev[s]+'_'+str(SiteDF.Month[s])+'_'+str(SiteDF.Year[s])+'_UAVCLS.tif'
+    ClassUAV = io.imread(ClassUAVName)
+    ClassUAV[ClassUAV>3] = 0 #filter other classes and cases where 255 is the no data value
+    Ccrisp1 = MakeCrispClass(S2Image, ClassUAVName, ClassUAV)
     
     
     
@@ -174,13 +191,16 @@ for s in range(len(SiteDF.Site)):
             AugTensor[E,:,:,:]=Ti[n,:,:,:]
             AugLabelDF.iloc[E] = LabelDF.iloc[n]
             E+=1
-            AugTensor[E,:,:,:]=np.rot90(Ti[n,:,:,:])
+            Irotated = np.rot90(Ti[n,:,:,:])
+            AugTensor[E,:,:,:]=Irotated 
             AugLabelDF.iloc[E] = LabelDF.iloc[n]
             E+=1
-            AugTensor[E,:,:,:]=np.fliplr(Ti[n,:,:,:])
+            Irotated = np.rot90(Irotated)
+            AugTensor[E,:,:,:]=Irotated
             AugLabelDF.iloc[E] = LabelDF.iloc[n]
             E+=1
-            AugTensor[E,:,:,:]=np.flipud(Ti[n,:,:,:])
+            Irotated = np.rot90(Irotated)
+            AugTensor[E,:,:,:]=Irotated
             AugLabelDF.iloc[E] = LabelDF.iloc[n]
             E+=1
     MasterLabelDF = pd.concat([MasterLabelDF, AugLabelDF])
@@ -208,13 +228,13 @@ for s in range(len(SiteDF.Site)):
     ClassPolyFile = DatFolder+SiteDF.Abbrev[s]+'_'+str(SiteDF.Month[s])+'_'+str(SiteDF.Year[s])+'_dbPoly.tif'
     #vectorise the Polygon classes
     ClassPoly = io.imread(ClassPolyFile)
-    ClasspolyVect = ClassPoly.ravel()
+    ClassPoly[ClassPoly>3] = 0 #filter other classes and cases where 255 is the no data value
     
     
     
     
-    Ti, Tl = slide_rasters_to_tiles(Isubset, np.zeros((Isubset.shape[0],Isubset.shape[1], 3 )), size)
-    del(Tl)
+    Ti, Tl = slide_rasters_to_tiles(Isubset, ClassPoly, size)
+
     labels = np.zeros((Ti.shape[0],7))
     LabelDF = pd.DataFrame(data=labels, columns=['RelMajClass','MajClass','PureClass','PolyClass','Month','Year','Site'])
     #add the labels and membership to a DF for export
@@ -222,7 +242,7 @@ for s in range(len(SiteDF.Site)):
         LabelDF.RelMajClass[t]=-1 #this flags the fact that this part does not compute polygon classes
         LabelDF.MajClass[t]=-1
         LabelDF.PureClass[t]=-1
-        LabelDF.PolyClass[t]=ClasspolyVect[t] 
+        LabelDF.PolyClass[t]=Tl[t,middle,middle,0].reshape(1,-1) 
         LabelDF.Month[t]=SiteDF.Month[s]
         LabelDF.Year[t]=SiteDF.Year[s]
         LabelDF.Site[t]=SiteDF.Abbrev[s]
@@ -234,20 +254,23 @@ for s in range(len(SiteDF.Site)):
     AugTensor = np.zeros((4*numel, size,size,Ti.shape[3]))
     
     
-    #assemble valid data and a bit of data augmentation with 90 degree rotation and flips of the tensor
+    #assemble valid data and a bit of data augmentation with three 90 degree rotations
     E=0
     for n in range(0, len(dataspots)):
         if dataspots[n]:
             AugTensor[E,:,:,:]=Ti[n,:,:,:]
             AugLabelDF.iloc[E] = LabelDF.iloc[n]
             E+=1
-            AugTensor[E,:,:,:]=np.rot90(Ti[n,:,:,:])
+            Irotated = np.rot90(Ti[n,:,:,:])
+            AugTensor[E,:,:,:]=Irotated 
             AugLabelDF.iloc[E] = LabelDF.iloc[n]
             E+=1
-            AugTensor[E,:,:,:]=np.fliplr(Ti[n,:,:,:])
+            Irotated = np.rot90(Irotated)
+            AugTensor[E,:,:,:]=Irotated
             AugLabelDF.iloc[E] = LabelDF.iloc[n]
             E+=1
-            AugTensor[E,:,:,:]=np.flipud(Ti[n,:,:,:])
+            Irotated = np.rot90(Irotated)
+            AugTensor[E,:,:,:]=Irotated
             AugLabelDF.iloc[E] = LabelDF.iloc[n]
             E+=1
     MasterLabelDF = pd.concat([MasterLabelDF, AugLabelDF])
