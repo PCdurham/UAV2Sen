@@ -26,8 +26,8 @@ import rasterio
 """Inputs"""
 #############################################################
 
-SiteList = 'E:\\UAV2SEN\\DebugList.csv'#this has the lists of sites with name, month and year
-DatFolder = 'E:\\UAV2SEN\\Debug\\' #location of above
+SiteList = 'F:\\SiteList.csv'#this has the lists of sites with name, month and year
+DatFolder = 'F:\\FinalTif\\' #location of above
 #
 SiteDF = pd.read_csv(SiteList)
 
@@ -41,7 +41,7 @@ size=5
 middle=2
 
 #Output location
-Outfile = 'E:\\UAV2SEN\\MLdata\\test3' #no extensions needed, added later
+Outfile = 'F:\\MLdata\\NNdebug' #no extensions needed, added later
 
 '''Functions'''
 def map2pix(rasterfile,xmap,ymap):
@@ -59,33 +59,34 @@ def GetPercentMixClass(CLS, UL, LR):
 
     Spot = CLS[UL[0]:LR[0], UL[1]:LR[1]]#
     c,counts = np.unique(Spot, return_counts=True)
-    
-    if (c.size>0):
-        if np.min(c)>0:
+    #print(str(len(c)))
+    if (len(c)>0): 
+        if (np.min(c)>0):#no UAV class pixels as no data. 10x10m area of S2 pixel is 100% classified
         
 
             if 1 in c:
                 C1 = np.where(c==1)
                 ClassOut[0,0,0] = counts[C1]/np.sum(counts)
-    
+        
             if 2 in c:
                 C2 = np.where(c==2)
                 ClassOut[0,0,1] = counts[C2]/np.sum(counts)
-    
+        
             if 3 in c:
                 C3 = np.where(c==3)
                 ClassOut[0,0,2] = counts[C3]/np.sum(counts)
+                
+        else:
+            ClassOut[0,0,0] = -1
     else:
-        ClassOut[0,0,0] = -1 #this flags a spot with no data
+        ClassOut[0,0,0] = -1
+    
         
                     
     return ClassOut
 
-def MakeFuzzyClass(S2Name, UAVClassName):
-    S2 = io.imread(S2Name)
-    w = S2.shape[0]
-    h = S2.shape[1] 
-    CLS_UAV = io.imread(UAVClassName)
+def MakeFuzzyClass(w,h,S2Name, UAVClassName, UAVClass):
+
     MixClass = np.zeros((w,h,3))
     for W in range(w):
         
@@ -93,7 +94,7 @@ def MakeFuzzyClass(S2Name, UAVClassName):
             S2coords = pix2map(S2Name, W,H)
             UL = map2pix(UAVClassName, S2coords[0]-5, S2coords[1]+5)
             LR = map2pix(UAVClassName, S2coords[0]+5, S2coords[1]-5)
-            MixClass[W,H,:] = GetPercentMixClass(CLS_UAV, UL, LR)
+            MixClass[W,H,:] = GetPercentMixClass( UAVClass, UL, LR)
                    
     return MixClass
 
@@ -131,6 +132,7 @@ else:
     
 #run through the sites in the DF and extract the data
 for s in range(len(SiteDF.Site)):
+    print('Processing '+SiteDF.Site[s]+' '+str(SiteDF.Month[s])+' '+str(SiteDF.Year[s]))
     # Getting the data
     S2Image = DatFolder+SiteDF.Abbrev[s]+'_'+str(SiteDF.Month[s])+'_'+str(SiteDF.Year[s])+'_S2.tif'
     I1=io.imread(S2Image)
@@ -143,16 +145,22 @@ for s in range(len(SiteDF.Site)):
     else:
         Isubset = I1[:,:,9:12]
         
-            
-    ClassUAV = DatFolder+SiteDF.Abbrev[s]+'_'+str(SiteDF.Month[s])+'_'+str(SiteDF.Year[s])+'_UAVCLS.tif'
-    #get both UAV class and S2 class and produce the fuzzy classification
-    Cfuzz1 = MakeFuzzyClass(S2Image, ClassUAV)
+    
+    #get both UAV class and S2 class and produce the fuzzy classification on the S2 image dimensions
+    w = I1.shape[0]
+    h = I1.shape[1]         
+    ClassUAVName = DatFolder+SiteDF.Abbrev[s]+'_'+str(SiteDF.Month[s])+'_'+str(SiteDF.Year[s])+'_UAVCLS.tif'
+    ClassUAV = io.imread(ClassUAVName)
+    ClassUAV[ClassUAV>3] = 0 #filter other classes and cases where 255 is the no data value
+   
+    Cfuzz1 = MakeFuzzyClass(w,h,S2Image, ClassUAVName, ClassUAV)
     
     
     
     Ti, Tl = slide_rasters_to_tiles(Isubset, Cfuzz1, size)
     labels = np.zeros((Tl.shape[0],6))
     LabelDF = pd.DataFrame(data=labels, columns=['VegMem','WaterMem','SedMem','Month','Year','Site'])
+
     #add the labels and membership to a DF for export
     for t in range(0, Tl.shape[0]):
         LabelDF.VegMem[t]=Tl[t,middle,middle,0].reshape(1,-1)
@@ -169,20 +177,23 @@ for s in range(len(SiteDF.Site)):
     AugTensor = np.zeros((4*numel, size,size,Ti.shape[3]))
     
     
-    #assemble valid data and a bit of data augmentation with 90 degree rotation and flips of the tensor
+    #assemble valid data and add a bit of data augmentation with three 90 degree rotations
     E=0
     for n in range(0, len(dataspots)):
         if dataspots[n]:
             AugTensor[E,:,:,:]=Ti[n,:,:,:]
             AugLabelDF.iloc[E] = LabelDF.iloc[n]
             E+=1
-            AugTensor[E,:,:,:]=np.rot90(Ti[n,:,:,:])
+            Irotated = np.rot90(Ti[n,:,:,:])
+            AugTensor[E,:,:,:]=Irotated 
             AugLabelDF.iloc[E] = LabelDF.iloc[n]
             E+=1
-            AugTensor[E,:,:,:]=np.fliplr(Ti[n,:,:,:])
+            Irotated = np.rot90(Irotated)
+            AugTensor[E,:,:,:]=Irotated
             AugLabelDF.iloc[E] = LabelDF.iloc[n]
             E+=1
-            AugTensor[E,:,:,:]=np.flipud(Ti[n,:,:,:])
+            Irotated = np.rot90(Irotated)
+            AugTensor[E,:,:,:]=Irotated
             AugLabelDF.iloc[E] = LabelDF.iloc[n]
             E+=1
     MasterLabelDF = pd.concat([MasterLabelDF, AugLabelDF])
