@@ -259,16 +259,16 @@ MasterTensor = MasterTensor[1:,:,:,:]
 
 
 #Remove the 4X data augmentation and take only points 1,4,8,etc...
-PointNums = np.asarray(range(0,len(MasterLabelDF.RelMajClass)))
-Spots = PointNums%4
-Valid = Spots==0
+#PointNums = np.asarray(range(0,len(MasterLabelDF.RelMajClass)))
+#Spots = PointNums%4
+#Valid = Spots==0
 
 #Subsample the labels and fix the index
-MasterLabelDF = MasterLabelDF.loc[Valid]
+#MasterLabelDF = MasterLabelDF.loc[Valid]
 MasterLabelDF.index = range(0,len(MasterLabelDF.RelMajClass))
 
 #Subsample the tensor
-MasterTensor = np.compress(Valid, MasterTensor, axis=0)
+#MasterTensor = np.compress(Valid, MasterTensor, axis=0)
 
 
 
