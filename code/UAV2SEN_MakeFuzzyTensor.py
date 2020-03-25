@@ -28,15 +28,8 @@ import rasterio
 
 SiteList = 'F:\\SiteList.csv'#this has the lists of sites with name, month and year
 DatFolder = 'F:\\FinalTif\\' #location of above
-#
-SiteDF = pd.read_csv(SiteList)
 
-Set = 1 # 1 is all bands, 2 is 3,4,8 and 3 is 9,10,11 
-
-#
-
-
-#tile size and associated index of middle pixel
+#tile size 
 size=5
 middle=2
 
@@ -120,30 +113,30 @@ def slide_rasters_to_tiles(im, CLS, size):
 
     return TileTensor, LabelTensor
 
+############################################################################################
 '''Main processing'''
+#load the site list
+SiteDF = pd.read_csv(SiteList)
+
+#Tile size
+if size%2 != 0:
+    middle=size//2
+else:
+    raise Exception('Tile size of '+str(size)+ ' is even and not valid. Please choose an odd tile size')
 
 #initialise the main outputs
 MasterLabelDict = {'VegMem':0,'WaterMem':0,'SedMem':0,'Month':0,'Year':0,'Site':'none'}
 MasterLabelDF = pd.DataFrame(data=MasterLabelDict, index=[0])
-if Set ==1:
-    MasterTensor = np.zeros((1,size,size,12))
-else:
-    MasterTensor = np.zeros((1,size,size,3))
+
+MasterTensor = np.zeros((1,size,size,12))
+
     
 #run through the sites in the DF and extract the data
 for s in range(len(SiteDF.Site)):
     print('Processing '+SiteDF.Site[s]+' '+str(SiteDF.Month[s])+' '+str(SiteDF.Year[s]))
     # Getting the data
     S2Image = DatFolder+SiteDF.Abbrev[s]+'_'+str(SiteDF.Month[s])+'_'+str(SiteDF.Year[s])+'_S2.tif'
-    I1=io.imread(S2Image)
-    #Slice the bands to get desired set, use indexing to change band set
-    if Set==1:
-        Isubset =I1
-    elif Set==2:
-        Isubset = I1[:,:,3:6]
-        Isubset[:,:,2] =I1[:,:,8]
-    else:
-        Isubset = I1[:,:,9:12]
+    Isubset=io.imread(S2Image)
         
     
     #get both UAV class and S2 class and produce the fuzzy classification on the S2 image dimensions
@@ -208,8 +201,8 @@ MasterTensor = MasterTensor[1:,:,:,:]
 
 
 #export to feather for the DF and numpy for the tensor
-OutTrain = Outfile +'__fuzzy_T.npy'
-OutLabel =  Outfile+'__fuzzy_L.dat'   
+OutTrain = Outfile +'_fuzzy_T.npy'
+OutLabel =  Outfile+'_fuzzy_L.dat'   
 np.save(OutTrain, MasterTensor)
 MasterLabelDF.to_feather(OutLabel)
 
