@@ -144,16 +144,8 @@ for s in range(len(SiteDF.Site)):
     print('Processing '+SiteDF.Site[s]+' '+str(SiteDF.Month[s])+' '+str(SiteDF.Year[s]))
     # Getting the data
     S2Image = DatFolder+SiteDF.Abbrev[s]+'_'+str(SiteDF.Month[s])+'_'+str(SiteDF.Year[s])+'_S2.tif'
-    I1=io.imread(S2Image)
-    #Slice the bands to get desired set, use indexing to change band set
-    if Set==1:
-        Isubset =I1
-    elif Set==2:
-        Isubset = I1[:,:,3:6]
-        Isubset[:,:,2] =I1[:,:,8]
-    else:
-        Isubset = I1[:,:,9:12]
-        
+    Isubset=io.imread(S2Image)
+           
             
     #get both UAV class and S2 class and produce the fuzzy classification on the S2 image dimensions
       
@@ -214,15 +206,8 @@ for s in range(len(SiteDF.Site)):
 for s in range(len(SiteDF.Site)):
     # Getting the data
     S2Image = DatFolder+SiteDF.Abbrev[s]+'_'+str(SiteDF.Month[s])+'_'+str(SiteDF.Year[s])+'_S2.tif'
-    I1=io.imread(S2Image)
-    #Slice the bands to get desired set, use indexing to change band set
-    if Set==1:
-        Isubset =I1
-    elif Set==2:
-        Isubset = I1[:,:,3:6]
-        Isubset[:,:,2] =I1[:,:,8]
-    else:
-        Isubset = I1[:,:,9:12]
+    Isubset=io.imread(S2Image)
+
         
             
     ClassPolyFile = DatFolder+SiteDF.Abbrev[s]+'_'+str(SiteDF.Month[s])+'_'+str(SiteDF.Year[s])+'_dbPoly.tif'
@@ -239,7 +224,7 @@ for s in range(len(SiteDF.Site)):
     LabelDF = pd.DataFrame(data=labels, columns=['RelMajClass','MajClass','PureClass','PolyClass','Month','Year','Site'])
     #add the labels and membership to a DF for export
     for t in range(0, Ti.shape[0]):
-        LabelDF.RelMajClass[t]=-1 #this flags the fact that this part does not classes from the UAV data
+        LabelDF.RelMajClass[t]=-1 #this flags the fact that this part does not compute classes from the UAV data
         LabelDF.MajClass[t]=-1
         LabelDF.PureClass[t]=-1
         LabelDF.PolyClass[t]=Tl[t,middle,middle,0].reshape(1,-1) 
@@ -281,17 +266,10 @@ MasterLabelDF = MasterLabelDF[MasterLabelDF.Site != 'none']
 MasterTensor = MasterTensor[1:,:,:,:]
 
 
-#Remove the 4X data augmentation and take only points 1,4,8,etc...
-#PointNums = np.asarray(range(0,len(MasterLabelDF.RelMajClass)))
-#Spots = PointNums%4
-#Valid = Spots==0
 
-#Subsample the labels and fix the index
-#MasterLabelDF = MasterLabelDF.loc[Valid]
 MasterLabelDF.index = range(0,len(MasterLabelDF.RelMajClass))
 
-#Subsample the tensor
-#MasterTensor = np.compress(Valid, MasterTensor, axis=0)
+
 
 
 
