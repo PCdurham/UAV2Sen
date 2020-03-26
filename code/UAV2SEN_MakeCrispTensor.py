@@ -26,15 +26,15 @@ import rasterio
 """Inputs"""
 #############################################################
 
-SiteList = 'F:\\SiteList.csv'#this has the lists of sites with name, month and year
-DatFolder = 'F:\\FinalTif\\' #location of above
+SiteList = 'E:\\UAV2SEN\\SiteListLong.csv'#this has the lists of sites with name, month and year
+DatFolder = 'E:\\UAV2SEN\\FinalTif\\' #location of above
 
 #tile size 
-size=5
+size=3
 
 
 #Output location
-Outfile = 'F:\\MLdata\\NNdebug' #no extensions needed, added later
+Outfile = 'E:\\UAV2SEN\\MLdata\\LargeDebug' #no extensions needed, added later
 
 
 ###############################################################################
@@ -94,22 +94,23 @@ def slide_rasters_to_tiles(im, CLS, size):
     h=im.shape[0]
     w=im.shape[1]
     di=im.shape[2]
+    mid=size//2
     try:
         dc =CLS.shape[2]
-        LabelTensor = np.zeros(((h-size)*(w-size), size,size,dc))
+        LabelTensor = np.zeros(((h-size+mid)*(w-size+mid), size,size,dc))
     except:
          dc=1
-         LabelTensor = np.zeros(((h-size)*(w-size), size,size))
+         LabelTensor = np.zeros(((h-size+mid)*(w-size+mid), size,size))
 
 
 
 
-    TileTensor = np.zeros(((h-size)*(w-size), size,size,di))
-    LabelTensor = np.zeros(((h-size)*(w-size), size,size,dc))
+    TileTensor = np.zeros(((h-size+mid)*(w-size+mid), size,size,di))
+    LabelTensor = np.zeros(((h-size+mid)*(w-size+mid), size,size,dc))
     
     B=0
-    for y in range(0, h-size):
-        for x in range(0, w-size):
+    for y in range(0, h-size+mid):
+        for x in range(0, w-size+mid):
             if dc>1:
                 LabelTensor[B] = CLS[y:y+size,x:x+size,:].reshape(size,size,dc)
             else:
@@ -153,6 +154,7 @@ for s in range(len(SiteDF.Site)):
       
     ClassUAVName = DatFolder+SiteDF.Abbrev[s]+'_'+str(SiteDF.Month[s])+'_'+str(SiteDF.Year[s])+'_UAVCLS.tif'
     ClassUAV = io.imread(ClassUAVName)
+    ClassUAV[ClassUAV<1] = 0 #catch no data <1 but not 0 cases
     ClassUAV[ClassUAV>3] = 0 #filter other classes and cases where 255 is the no data value
     Ccrisp1 = MakeCrispClass(S2Image, ClassUAVName, ClassUAV)
     
@@ -216,7 +218,7 @@ for s in range(len(SiteDF.Site)):
     #vectorise the Polygon classes
     ClassPoly = io.imread(ClassPolyFile)
     ClassPoly[ClassPoly>3] = 0 #filter other classes and cases where 255 is the no data value
-    
+    ClassPoly[ClassPoly<1] = 0
     
     
     
