@@ -25,9 +25,9 @@ from sklearn.model_selection import train_test_split
 #############################################################
 """User data input. Use the site template and list training and validation choices"""
 #############################################################
-MainData = 'F:\\MLdata\\NNdebug'  #no extensions, will be fleshed out below
-SiteList = 'F:\\SiteList.csv'#this has the lists of sites with name, month, year and 1s and 0s to identify training and validation sites
-DatFolder = 'F:\\FinalTif\\' #location of above
+MainData = 'E:\\UAV2SEN\\MLdata\\SmallDebug'  #main data output from UAV2SEN_MakeCrispTensor, no extensions, will be fleshed out below
+SiteList = 'E:\\UAV2SEN\\SiteListDebugMini.csv'#this has the lists of sites with name, month, year and 1s and 0s to identify training and validation sites
+DatFolder = 'E:\\UAV2SEN\\Debug\\'  #location of above
 TrainingEpochs = 150 #Typically this can be reduced
 UAV = True #if true the crisp class will run with the UAV based classifications crisped up to majorities.  If false, use desk-based polygons
 MajType= 'RelMaj' #only used if UAV is true. The options are RelMaj, Maj and Pure.
@@ -36,7 +36,7 @@ FeatureSet = ['B1','B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12'] # 
 
 
 
-'''Load the tensors, squeeze to get single pixel values and filter out the required training and validation data.'''
+'''Load the tensors, remove data augmentation meant for CNNs, squeeze to get single pixel values and filter out the required training and validation data.'''
 TensorFileName = MainData+'_crisp_T.npy'
 LabelFileName = MainData+'_crisp_L.dat'
 
