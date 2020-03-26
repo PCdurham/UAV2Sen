@@ -26,15 +26,15 @@ import rasterio
 """Inputs"""
 #############################################################
 
-SiteList = 'F:\\SiteList.csv'#this has the lists of sites with name, month and year
-DatFolder = 'F:\\FinalTif\\' #location of above
+SiteList = 'E:\\UAV2SEN\\SiteListDebugMini.csv'#this has the lists of sites with name, month and year
+DatFolder = 'E:\\UAV2SEN\\Debug\\'#location of above
 
 #tile size 
-size=5
-middle=2
+size=3
+
 
 #Output location
-Outfile = 'F:\\MLdata\\NNdebug' #no extensions needed, added later
+Outfile = 'E:\\UAV2SEN\\MLdata\\SmallDebug' #no extensions needed, added later
 
 '''Functions'''
 def map2pix(rasterfile,xmap,ymap):
@@ -57,13 +57,13 @@ def GetPercentMixClass(CLS, UL, LR):
         if (np.min(c)>0):#no UAV class pixels as no data. 10x10m area of S2 pixel is 100% classified
         
 
-            if 1 in c:
+            if 1 in c:#in the drone classes, water=1, veg=2 and sed=3
                 C1 = np.where(c==1)
-                ClassOut[0,0,0] = counts[C1]/np.sum(counts)
+                ClassOut[0,0,1] = counts[C1]/np.sum(counts)
         
             if 2 in c:
                 C2 = np.where(c==2)
-                ClassOut[0,0,1] = counts[C2]/np.sum(counts)
+                ClassOut[0,0,0] = counts[C2]/np.sum(counts)
         
             if 3 in c:
                 C3 = np.where(c==3)
@@ -98,14 +98,14 @@ def slide_rasters_to_tiles(im, CLS, size):
     dc =CLS.shape[2]
     h=im.shape[0]
     w=im.shape[1]
+    mid=size//2
 
 
-
-    TileTensor = np.zeros(((h-size)*(w-size), size,size,di))
-    LabelTensor = np.zeros(((h-size)*(w-size), size,size,dc))
+    TileTensor = np.zeros(((h-size+mid)*(w-size+mid), size,size,di))
+    LabelTensor = np.zeros(((h-size+mid)*(w-size+mid), size,size,dc))
     B=0
-    for y in range(0, h-size):
-        for x in range(0, w-size):
+    for y in range(0, h-size+mid):
+        for x in range(0, w-size+mid):
             LabelTensor[B] = CLS[y:y+size,x:x+size,:].reshape(size,size,dc)
 
             TileTensor[B,:,:,:] = im[y:y+size,x:x+size,:].reshape(size,size,di)
@@ -140,12 +140,12 @@ for s in range(len(SiteDF.Site)):
         
     
     #get both UAV class and S2 class and produce the fuzzy classification on the S2 image dimensions
-    w = I1.shape[0]
-    h = I1.shape[1]         
+    w = Isubset.shape[0]
+    h = Isubset.shape[1]         
     ClassUAVName = DatFolder+SiteDF.Abbrev[s]+'_'+str(SiteDF.Month[s])+'_'+str(SiteDF.Year[s])+'_UAVCLS.tif'
     ClassUAV = io.imread(ClassUAVName)
     ClassUAV[ClassUAV>3] = 0 #filter other classes and cases where 255 is the no data value
-   
+    ClassUAV[ClassUAV<1] = 0 #catch no data <1 but not 0 
     Cfuzz1 = MakeFuzzyClass(w,h,S2Image, ClassUAVName, ClassUAV)
     
     
