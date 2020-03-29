@@ -26,15 +26,15 @@ import rasterio
 """Inputs"""
 #############################################################
 
-SiteList = 'E:\\UAV2SEN\\SiteListLong.csv'#this has the lists of sites with name, month and year
+SiteList = 'E:\\UAV2SEN\\SiteList.csv'#this has the lists of sites with name, month and year
 DatFolder = 'E:\\UAV2SEN\\FinalTif\\' #location of above
 
 #tile size 
-size=3
+size=5
 
 
 #Output location
-Outfile = 'E:\\UAV2SEN\\MLdata\\LargeDebug' #no extensions needed, added later
+Outfile = 'E:\\UAV2SEN\\MLdata\\CNNDebug' #no extensions needed, added later
 
 '''Functions'''
 def map2pix(rasterfile,xmap,ymap):
@@ -98,17 +98,17 @@ def slide_rasters_to_tiles(im, CLS, size):
     dc =CLS.shape[2]
     h=im.shape[0]
     w=im.shape[1]
-    mid=size//2
+ 
 
 
-    TileTensor = np.zeros(((h-size+mid)*(w-size+mid), size,size,di))
-    LabelTensor = np.zeros(((h-size+mid)*(w-size+mid), size,size,dc))
+    TileTensor = np.zeros(((h-size)*(w-size), size,size,di))
+    LabelTensor = np.zeros(((h-size)*(w-size), size,size,dc))
     B=0
-    for y in range(0, h-size+mid):
-        for x in range(0, w-size+mid):
-            LabelTensor[B] = CLS[y:y+size,x:x+size,:].reshape(size,size,dc)
+    for y in range(0, h-size):
+        for x in range(0, w-size):
+            LabelTensor[B,:,:,:] = CLS[y:y+size,x:x+size,:]#.reshape(size,size,dc)
 
-            TileTensor[B,:,:,:] = im[y:y+size,x:x+size,:].reshape(size,size,di)
+            TileTensor[B,:,:,:] = im[y:y+size,x:x+size,:]#.reshape(size,size,di)
             B+=1
 
     return TileTensor, LabelTensor
@@ -177,16 +177,19 @@ for s in range(len(SiteDF.Site)):
             AugTensor[E,:,:,:]=Ti[n,:,:,:]
             AugLabelDF.iloc[E] = LabelDF.iloc[n]
             E+=1
+            noise=0.0001*np.random.random((1,size,size,12))
             Irotated = np.rot90(Ti[n,:,:,:])
-            AugTensor[E,:,:,:]=Irotated 
+            AugTensor[E,:,:,:]=Irotated + noise
             AugLabelDF.iloc[E] = LabelDF.iloc[n]
             E+=1
+            noise=0.0001*np.random.random((1,size,size,12))
             Irotated = np.rot90(Irotated)
-            AugTensor[E,:,:,:]=Irotated
+            AugTensor[E,:,:,:]=Irotated + noise
             AugLabelDF.iloc[E] = LabelDF.iloc[n]
             E+=1
+            noise=0.0001*np.random.random((1,size,size,12))
             Irotated = np.rot90(Irotated)
-            AugTensor[E,:,:,:]=Irotated
+            AugTensor[E,:,:,:]=Irotated + noise
             AugLabelDF.iloc[E] = LabelDF.iloc[n]
             E+=1
     MasterLabelDF = pd.concat([MasterLabelDF, AugLabelDF])
@@ -201,8 +204,8 @@ MasterTensor = MasterTensor[1:,:,:,:]
 
 
 #export to feather for the DF and numpy for the tensor
-OutTrain = Outfile +'_fuzzy_T.npy'
-OutLabel =  Outfile+'_fuzzy_L.dat'   
+OutTrain = Outfile +'_fuzzy_'+str(size)+'_T.npy'
+OutLabel =  Outfile+'_fuzzy_'+str(size)+'_L.dat'   
 np.save(OutTrain, MasterTensor)
 MasterLabelDF.to_feather(OutLabel)
 
