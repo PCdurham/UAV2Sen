@@ -27,30 +27,30 @@ from pickle import dump
 #############################################################
 """User data input. Use the site template and list training and validation choices"""
 #############################################################
-MainData = 'E:\\UAV2SEN\\MLdata\\LargeDebug'  #main data output from UAV2SEN_MakeCrispTensor.py. no extensions, will be fleshed out below
-SiteList = 'E:\\UAV2SEN\\SiteListLong.csv'#this has the lists of sites with name, month, year and 1s and 0s to identify training and validation sites
+MainData = 'E:\\UAV2SEN\\MLdata\\DNNDebug'  #main data output from UAV2SEN_MakeCrispTensor.py. no extensions, will be fleshed out below
+SiteList = 'E:\\UAV2SEN\\SiteList.csv'#this has the lists of sites with name, month, year and 1s and 0s to identify training and validation sites
 DatFolder = 'E:\\UAV2SEN\\FinalTif\\'  #location of above
-TrainingEpochs = 100 #Typically this can be reduced
-
+TrainingEpochs = 150 #Typically this can be reduced
+size=5 #size of the tiles used to compile the data
 UAVtrain = True #if true use the UAV class data to train the model, if false use desk-based
 UAVvalid = True #if true use the UAV class data to validate.  If false, use desk-based polygons
 
-MajType= 'Pure' #Majority type. only used if UAVtrain or valid is true. The options are RelMaj (relative majority), Maj (majority) and Pure (95% unanimous).
+MajType= 'Maj' #Majority type. only used if UAVtrain or valid is true. The options are RelMaj (relative majority), Maj (majority) and Pure (95% unanimous).
 
 FeatureSet = ['B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12'] # pick predictor bands from: ['B1','B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12']
 
-LearningRate = 0.0001
+LearningRate = 0.00005
 Chatty = 1 # set the verbosity of the model training. 
 
 
 
 '''Load the tensors, remove data augmentation meant for CNNs, squeeze to get single pixel values and filter out the required training and validation data.'''
-TensorFileName = MainData+'_crisp_T.npy'
-LabelFileName = MainData+'_crisp_L.dat'
+TensorFileName = MainData+'_crisp_'+str(size)+'_T.npy'
+LabelFileName = MainData+'_crisp_'+str(size)+'_L.csv'
 
 SiteDF = pd.read_csv(SiteList)
 Tensor = np.load(TensorFileName)
-MasterLabelDF=pd.read_feather(LabelFileName)
+MasterLabelDF=pd.read_csv(LabelFileName)
 
 #Remove the 4X data augmentation only relevant to the CNNs and take only points 0,4,8,etc...
 PointNums = np.asarray(range(0,len(MasterLabelDF.RelMajClass)))
@@ -208,7 +208,7 @@ def nodrop_model_L2D():
     
     model.add(Dense(32, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation='relu'))
     model.add(Dense(16, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation='relu'))
-    model.add(Dense(NClasses, kernel_initializer='normal', activation='linear'))
+    model.add(Dense(NClasses, kernel_initializer='normal', activation='relu'))
     
     
     #Tune an optimiser
