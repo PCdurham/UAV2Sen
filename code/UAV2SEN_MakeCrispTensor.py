@@ -26,15 +26,15 @@ import rasterio
 """Inputs"""
 #############################################################
 
-SiteList = 'E:\\UAV2SEN\\SiteListLong.csv'#this has the lists of sites with name, month and year
+SiteList = 'E:\\UAV2SEN\\SiteList.csv'#this has the lists of sites with name, month and year
 DatFolder = 'E:\\UAV2SEN\\FinalTif\\' #location of above
 
 #tile size 
-size=3
+size=5
 
 
 #Output location
-Outfile = 'E:\\UAV2SEN\\MLdata\\LargeDebug' #no extensions needed, added later
+Outfile = 'E:\\UAV2SEN\\MLdata\\DNNDebug' #no extensions needed, added later
 
 
 ###############################################################################
@@ -94,30 +94,27 @@ def slide_rasters_to_tiles(im, CLS, size):
     h=im.shape[0]
     w=im.shape[1]
     di=im.shape[2]
-    mid=size//2
+
     try:
         dc =CLS.shape[2]
-        LabelTensor = np.zeros(((h-size+mid)*(w-size+mid), size,size,dc))
-    except:
+        LabelTensor = np.zeros(((h-size)*(w-size), size,size,dc))
+    except:#case with desk-based polygons having 2D labels
          dc=1
-         LabelTensor = np.zeros(((h-size+mid)*(w-size+mid), size,size))
+         LabelTensor = np.zeros(((h-size)*(w-size), size,size,dc))
 
+    TileTensor = np.zeros(((h-size)*(w-size), size,size,di))
 
-
-
-    TileTensor = np.zeros(((h-size+mid)*(w-size+mid), size,size,di))
-    LabelTensor = np.zeros(((h-size+mid)*(w-size+mid), size,size,dc))
     
     B=0
-    for y in range(0, h-size+mid):
-        for x in range(0, w-size+mid):
+    for y in range(0, h-size):
+        for x in range(0, w-size):
+            #print(str(x)+' '+str(y))
             if dc>1:
-                LabelTensor[B] = CLS[y:y+size,x:x+size,:].reshape(size,size,dc)
+                LabelTensor[B,:,:,:] = CLS[y:y+size,x:x+size,:]#.reshape(size,size,dc)
             else:
-                LabelTensor[B] = CLS[y:y+size,x:x+size].reshape(size,size,1)
-                
+                LabelTensor[B,:,:,0] = CLS[y:y+size,x:x+size]#.reshape(size,size,1)
 
-            TileTensor[B,:,:,:] = im[y:y+size,x:x+size,:].reshape(size,size,di)
+            TileTensor[B,:,:,:] = im[y:y+size,x:x+size,:]#.reshape(size,size,di)
             B+=1
 
     return TileTensor, LabelTensor
@@ -142,9 +139,9 @@ MasterTensor = np.zeros((1,size,size,12))
 
 
     
-#run through the sites in the DF and extract the data
+##run through the sites in the DF and extract the data
 for s in range(len(SiteDF.Site)):
-    print('Processing '+SiteDF.Site[s]+' '+str(SiteDF.Month[s])+' '+str(SiteDF.Year[s]))
+    print('Processing UAV classes '+SiteDF.Site[s]+' '+str(SiteDF.Month[s])+' '+str(SiteDF.Year[s]))
     # Getting the data
     S2Image = DatFolder+SiteDF.Abbrev[s]+'_'+str(SiteDF.Month[s])+'_'+str(SiteDF.Year[s])+'_S2.tif'
     Isubset=io.imread(S2Image)
@@ -187,16 +184,19 @@ for s in range(len(SiteDF.Site)):
             AugTensor[E,:,:,:]=Ti[n,:,:,:]
             AugLabelDF.iloc[E] = LabelDF.iloc[n]
             E+=1
+            noise=0.0001*np.random.random((1,size,size,12))
             Irotated = np.rot90(Ti[n,:,:,:])
-            AugTensor[E,:,:,:]=Irotated 
+            AugTensor[E,:,:,:]=Irotated + noise
             AugLabelDF.iloc[E] = LabelDF.iloc[n]
             E+=1
+            noise=0.0001*np.random.random((1,size,size,12))
             Irotated = np.rot90(Irotated)
-            AugTensor[E,:,:,:]=Irotated
+            AugTensor[E,:,:,:]=Irotated + noise
             AugLabelDF.iloc[E] = LabelDF.iloc[n]
             E+=1
+            noise=0.0001*np.random.random((1,size,size,12))
             Irotated = np.rot90(Irotated)
-            AugTensor[E,:,:,:]=Irotated
+            AugTensor[E,:,:,:]=Irotated + noise
             AugLabelDF.iloc[E] = LabelDF.iloc[n]
             E+=1
     MasterLabelDF = pd.concat([MasterLabelDF, AugLabelDF])
@@ -208,6 +208,7 @@ for s in range(len(SiteDF.Site)):
     
 #run through the sites in the DF and extract the data
 for s in range(len(SiteDF.Site)):
+    print('Processing desk-based polygon classes '+SiteDF.Site[s]+' '+str(SiteDF.Month[s])+' '+str(SiteDF.Year[s]))
     # Getting the data
     S2Image = DatFolder+SiteDF.Abbrev[s]+'_'+str(SiteDF.Month[s])+'_'+str(SiteDF.Year[s])+'_S2.tif'
     Isubset=io.imread(S2Image)
@@ -223,6 +224,9 @@ for s in range(len(SiteDF.Site)):
     
     
     Ti, Tl = slide_rasters_to_tiles(Isubset, ClassPoly, size)
+#    if len(Tl.shape)==3:
+#        Tl=Tl.reshape(Tl.shape[0], Tl.shape[1], Tl.shape[2], 1)
+#        
 
     labels = np.zeros((Ti.shape[0],7))
     LabelDF = pd.DataFrame(data=labels, columns=['RelMajClass','MajClass','PureClass','PolyClass','Month','Year','Site'])
@@ -250,16 +254,19 @@ for s in range(len(SiteDF.Site)):
             AugTensor[E,:,:,:]=Ti[n,:,:,:]
             AugLabelDF.iloc[E] = LabelDF.iloc[n]
             E+=1
+            noise=0.0001*np.random.random((1,size,size,12))
             Irotated = np.rot90(Ti[n,:,:,:])
-            AugTensor[E,:,:,:]=Irotated 
+            AugTensor[E,:,:,:]=Irotated + noise
             AugLabelDF.iloc[E] = LabelDF.iloc[n]
             E+=1
+            noise=0.0001*np.random.random((1,size,size,12))
             Irotated = np.rot90(Irotated)
-            AugTensor[E,:,:,:]=Irotated
+            AugTensor[E,:,:,:]=Irotated + noise
             AugLabelDF.iloc[E] = LabelDF.iloc[n]
             E+=1
+            noise=0.0001*np.random.random((1,size,size,12))
             Irotated = np.rot90(Irotated)
-            AugTensor[E,:,:,:]=Irotated
+            AugTensor[E,:,:,:]=Irotated + noise
             AugLabelDF.iloc[E] = LabelDF.iloc[n]
             E+=1
     MasterLabelDF = pd.concat([MasterLabelDF, AugLabelDF])
@@ -278,10 +285,10 @@ MasterLabelDF.index = range(0,len(MasterLabelDF.RelMajClass))
 
 
 #export to feather for the DF and numpy for the tensor
-OutTrain = Outfile +'_crisp_T.npy'
-OutLabel =  Outfile+'_crisp_L.dat'   
+OutTrain = Outfile +'_crisp_'+str(size)+'_T.npy'
+OutLabel =  Outfile+'_crisp_'+str(size)+'_L.csv'   
 np.save(OutTrain, MasterTensor)
-MasterLabelDF.to_feather(OutLabel)
+MasterLabelDF.to_csv(OutLabel)
 
 
       
