@@ -58,18 +58,6 @@ SiteDF = pd.read_csv(SiteList)
 MasterTensor = np.load(TensorFileName)
 MasterLabelDF=pd.read_csv(LabelFileName)
 
-#Remove the 4X data augmentation only relevant to the CNNs and take only points 0,4,8,etc...
-PointNums = np.asarray(range(0,len(MasterLabelDF.RelMajClass)))
-Spots = PointNums%4
-Valid = Spots==0
-
-#Subsample the labels and fix the index
-MasterLabelDF = MasterLabelDF.loc[Valid]
-MasterLabelDF.index = range(0,len(MasterLabelDF.RelMajClass))
-
-#Subsample the tensor
-MasterTensor = np.compress(Valid, MasterTensor, axis=0)
-
 
 #Select the features in the tensor
 
@@ -81,22 +69,37 @@ for n in range(1,13):
 MasterTensor = np.compress(Valid, MasterTensor, axis=3)
 
 #Start the filter process to isolate training and validation data
+TrainingSites = SiteDF[SiteDF.Training == 1]
 ValidationSites = SiteDF[SiteDF.Validation == 1]
+TrainingSites.index = range(0,len(TrainingSites.Year))
+ValidationSites.index = range(0,len(ValidationSites.Year))
+#initialise the training and validation DFs to the master
+TrainingDF = MasterLabelDF
+TrainingTensor = MasterTensor
+ValidationDF = MasterLabelDF
+ValidationTensor = MasterTensor
 
-#isolate the site. first labels then tensors
-ValidationDF = MasterLabelDF[MasterLabelDF['Site'].isin(ValidationSites.Abbrev.to_list())]
-Valid = MasterLabelDF['Site'].isin(ValidationSites.Abbrev.to_list())
-ValidationTensor = np.compress(Valid, MasterTensor, axis=0)
+#isolate the sites, months and year and isolate the associated tensor values
+MasterValid = (np.zeros(len(MasterLabelDF.index)))==1
+for s in range(len(TrainingSites.Site)):
+    Valid = (TrainingDF.Site == TrainingSites.Abbrev[s])&(TrainingDF.Year==TrainingSites.Year[s])&(TrainingDF.Month==TrainingSites.Month[s])
+    MasterValid = MasterValid | Valid
+    
+TrainingDF = TrainingDF.loc[MasterValid]
+TrainingTensor=np.compress(MasterValid,TrainingTensor, axis=0)#will delete where valid is false
 
-#isolate the year
-ValidationDF = ValidationDF[ValidationDF['Year'].isin(ValidationSites.Year.to_list())]
-Valid = ValidationDF['Year'].isin(ValidationSites.Year.to_list())
-ValidationTensor = np.compress(Valid, ValidationTensor, axis=0)
+MasterValid = (np.zeros(len(MasterLabelDF.index)))
+for s in range(len(ValidationSites.Site)):
+    Valid = (ValidationDF.Site == ValidationSites.Abbrev[s])&(ValidationDF.Year==ValidationSites.Year[s])&(ValidationDF.Month==ValidationSites.Month[s])
+    MasterValid = MasterValid | Valid
+    
+ValidationDF = ValidationDF.loc[MasterValid]
+ValidationTensor = np.compress(MasterValid,ValidationTensor, axis=0)#will delete where valid is false 
 
-#isolate the month
-ValidationDF = ValidationDF[ValidationDF['Month'].isin(ValidationSites.Month.to_list())]
-Valid = ValidationDF['Month'].isin(ValidationSites.Month.to_list())
-ValidationTensor = np.compress(Valid, ValidationTensor, axis=0)
+
+#Set the labels
+TrainingLabels = TrainingDF[LabelSet]
+ValidationLabels = ValidationDF[LabelSet]
 
 #Set the labels
 #select desk-based or UAV-based for validation, if using UAV data, select the majority type
