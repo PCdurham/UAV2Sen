@@ -28,18 +28,18 @@ from pickle import dump
 #############################################################
 """User data input. Use the site template and list training and validation choices"""
 #############################################################
-MainData = 'E:\\UAV2SEN\\MLdata\\DNNDebug'  #main data output from UAV2SEN_MakeCrispTensor.py. no extensions, will be fleshed out below
+MainData = 'E:\\UAV2SEN\\MLdata\\FullData_4xnoise'  #main data output from UAV2SEN_MakeCrispTensor.py. no extensions, will be fleshed out below
 SiteList = 'E:\\UAV2SEN\\SiteList.csv'#this has the lists of sites with name, month, year and 1s and 0s to identify training and validation sites
 DatFolder = 'E:\\UAV2SEN\\FinalTif\\'  #location of above
 TrainingEpochs = 100 #Typically this can be reduced
 Nfilters = 32
-UAVtrain = False #if true use the UAV class data to train the model, if false use desk-based
+UAVtrain = True #if true use the UAV class data to train the model, if false use desk-based
 UAVvalid = True #if true use the UAV class data to validate.  If false, use desk-based polygons
 size=5#size of the tensor tiles
 KernelSize=5 # size of the convolution kernels
 MajType= 'Maj' #Majority type. only used if UAVtrain or valid is true. The options are RelMaj (relative majority), Maj (majority) and Pure (95% unanimous).
 
-FeatureSet =  ['B1','B2','B9','B10','B12'] # pick predictor bands from: ['B1','B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12']
+FeatureSet = ['B8','B9','B10','B11','B12'] # pick predictor bands from: ['B1','B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12']
 
 LearningRate = 0.001
 Chatty = 1 # set the verbosity of the model training. 
@@ -70,7 +70,7 @@ Valid = Spots==0
 
 #Subsample the labels and fix the index
 MasterLabelDF = MasterLabelDF.loc[Valid]
-MasterLabelDF.index = range(0,len(MasterLabelDF.RelMajClass))
+#MasterLabelDF.index = range(0,len(MasterLabelDF.RelMajClass))
 MasterTensor = np.compress(Valid, MasterTensor, axis=0)
 
 
