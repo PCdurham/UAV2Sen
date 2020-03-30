@@ -30,19 +30,19 @@ import matplotlib.patches as mpatches
 #############################################################
 """User data input. Use the site template and list training and validation choices"""
 #############################################################
-MainData = 'E:\\MLdata\\FullData_4xnoise'  #main data output from UAV2SEN_MakeCrispTensor.py. no extensions, will be fleshed out below
-SiteList = 'E:\\SiteList.csv'#this has the lists of sites with name, month, year and 1s and 0s to identify training and validation sites
-DatFolder = 'E:\\FinalTif\\'  #location of above
-TrainingEpochs = 50 #Typically this can be reduced
+MainData = 'E:\\UAV2SEN\\MLdata\\FullData_4xnoise'  #main data output from UAV2SEN_MakeCrispTensor.py. no extensions, will be fleshed out below
+SiteList = 'E:\\UAV2SEN\\SiteList.csv'#this has the lists of sites with name, month, year and 1s and 0s to identify training and validation sites
+DatFolder = 'E:\\UAV2SEN\\FinalTif\\'  #location of processed tif files
+TrainingEpochs = 25 #Typically this can be reduced
 size=5 #size of the tiles used to compile the data
 UAVtrain = True #if true use the UAV class data to train the model, if false use desk-based
 UAVvalid = True #if true use the UAV class data to validate.  If false, use desk-based polygons
 ShowValidation = True #if true will show predicted class rasters for validation images from the site list
 MajType= 'Pure' #Majority type. only used if UAVtrain or valid is true. The options are RelMaj (relative majority), Maj (majority) and Pure (95% unanimous).
 
-FeatureSet = ['B8','B9','B10','B11','B12'] # pick predictor bands from: ['B1','B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12']
+FeatureSet = ['B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12'] # pick predictor bands from: ['B1','B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12']
 
-LearningRate = 0.00005
+LearningRate = 0.0001
 Chatty = 1 # set the verbosity of the model training. 
 
 #################################################################################
@@ -286,19 +286,20 @@ if ShowValidation:
         PixelData = np.squeeze( ValidTensor[:,Middle, Middle,:])
         PixelDF = pd.DataFrame(data=PixelData, columns=['B1','B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12'])
         ValidationFeatures = PixelDF[FeatureSet]
+        ValidationFeatures = Scaler.transform(ValidationFeatures)
         PredictedPixels = EstimatorNN.predict(ValidationFeatures)
         PredictedClassImage = np.uint8(PredictedPixels.reshape(ValidRaster.shape[0]-size, ValidRaster.shape[1]-size))
-        PredictedClassImage[0,0]=1
-        PredictedClassImage[0,1]=2
-        PredictedClassImage[0,2]=3
-        PredictedClassImage[0,3]=4
-        cmapCHM = colors.ListedColormap(['black','red','green','blue'])
+        PredictedClassImage[0,0]=0
+        PredictedClassImage[0,1]=1
+        PredictedClassImage[0,2]=2
+        PredictedClassImage[0,3]=3
+        cmapCHM = colors.ListedColormap(['black','blue','green','red'])
         plt.figure()
         plt.imshow(PredictedClassImage, cmap=cmapCHM)
         class0_box = mpatches.Patch(color='black', label='Unclassified')
-        class1_box = mpatches.Patch(color='red', label='Sediment')
+        class1_box = mpatches.Patch(color='blue', label='Water')
         class2_box = mpatches.Patch(color='green', label='Veg.')
-        class3_box = mpatches.Patch(color='blue', label='Water')
+        class3_box = mpatches.Patch(color='red', label='Sediment')
         ax=plt.gca()
         ax.legend(handles=[class0_box, class1_box,class2_box,class3_box])
         plt.title(ValidRasterName)
