@@ -199,7 +199,7 @@ for s in range(len(SiteDF.Site)):
         
 #Clean up the final DFs for export    
 MasterLabelDF = MasterLabelDF[MasterLabelDF.Site != 'none']
-#MasterLabelDF.index = range(0,len(MasterLabelDF.VegMem))
+MasterLabelDF.index = range(0,len(MasterLabelDF.VegMem))
 MasterTensor = MasterTensor[1:,:,:,:]
 
 
