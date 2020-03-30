@@ -32,18 +32,18 @@ import matplotlib.patches as mpatches
 #############################################################
 """User data input. Use the site template and list training and validation choices"""
 #############################################################
-MainData = 'E:\\MLdata\\FullData_4xnoise'  #main data output from UAV2SEN_MakeCrispTensor.py. no extensions, will be fleshed out below
-SiteList = 'E:\\SiteList.csv'#this has the lists of sites with name, month, year and 1s and 0s to identify training and validation sites
-DatFolder = 'E:\\FinalTif\\'  #location of above
-TrainingEpochs = 50 #Typically this can be reduced
+MainData = 'E:\\UAV2SEN\\MLdata\\FullData_4xnoise'  #main data output from UAV2SEN_MakeCrispTensor.py. no extensions, will be fleshed out below
+SiteList = 'E:\\UAV2SEN\\SiteList.csv'#this has the lists of sites with name, month, year and 1s and 0s to identify training and validation sites
+DatFolder = 'E:\\UAV2SEN\\FinalTif\\'  #location of above
+TrainingEpochs = 5 #Typically this can be reduced
 Nfilters = 128
 UAVtrain = True #if true use the UAV class data to train the model, if false use desk-based
 UAVvalid = True #if true use the UAV class data to validate.  If false, use desk-based polygons
 size=5#size of the tensor tiles
-KernelSize=5 # size of the convolution kernels
+KernelSize=3 # size of the convolution kernels
 MajType= 'Pure' #Majority type. only used if UAVtrain or valid is true. The options are RelMaj (relative majority), Maj (majority) and Pure (95% unanimous).
 ShowValidation = True #if true will show predicted class rasters for validation images from the site list
-FeatureSet = ['B8','B9','B10','B11','B12'] # pick predictor bands from: ['B1','B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12']
+FeatureSet = ['B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12'] # pick predictor bands from: ['B1','B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12']
 
 LearningRate = 0.001
 Chatty = 1 # set the verbosity of the model training. 
@@ -265,15 +265,41 @@ inShape = TrainingTensor.shape[1:]
 # define the very deep model with L2 regularization and dropout
 
  	# create model
-Estimator = Sequential()
-Estimator.add(Conv2D(Nfilters,5, data_format='channels_last', input_shape=(5,5,Ndims), activation=NAF))
-Estimator.add(Flatten())
-Estimator.add(Dense(128, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
-Estimator.add(BatchNormalization(axis=-1, momentum=0.99, epsilon=0.001, center=True, scale=True, beta_initializer='zeros', gamma_initializer='ones', moving_mean_initializer='zeros', moving_variance_initializer='ones', beta_regularizer=None, gamma_regularizer=None, beta_constraint=None, gamma_constraint=None))
-Estimator.add(Dense(64, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
-Estimator.add(Dense(32, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
-Estimator.add(Dense(NClasses+1, kernel_initializer='normal', activation='softmax'))
+if size==3: 
+    Estimator = Sequential()
+    Estimator.add(Conv2D(Nfilters,KernelSize, data_format='channels_last', input_shape=inShape, activation=NAF))
+    Estimator.add(Flatten())
+    Estimator.add(Dense(64, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
+    Estimator.add(BatchNormalization(axis=-1, momentum=0.99, epsilon=0.001, center=True, scale=True, beta_initializer='zeros', gamma_initializer='ones', moving_mean_initializer='zeros', moving_variance_initializer='ones', beta_regularizer=None, gamma_regularizer=None, beta_constraint=None, gamma_constraint=None))
+    Estimator.add(Dense(32, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
+    Estimator.add(Dense(16, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
+    Estimator.add(Dense(NClasses+1, kernel_initializer='normal', activation='linear'))    
 
+
+elif size==5:
+    Estimator = Sequential()
+    Estimator.add(Conv2D(Nfilters,KernelSize, data_format='channels_last', input_shape=inShape, activation=NAF))
+    Estimator.add(Conv2D(Nfilters//2,KernelSize, activation=NAF))
+    Estimator.add(Flatten())
+    Estimator.add(Dense(64, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
+    Estimator.add(BatchNormalization(axis=-1, momentum=0.99, epsilon=0.001, center=True, scale=True, beta_initializer='zeros', gamma_initializer='ones', moving_mean_initializer='zeros', moving_variance_initializer='ones', beta_regularizer=None, gamma_regularizer=None, beta_constraint=None, gamma_constraint=None))
+    Estimator.add(Dense(32, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
+    Estimator.add(Dense(16, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
+    Estimator.add(Dense(NClasses+1, kernel_initializer='normal', activation='linear'))
+    
+elif size==7:
+    Estimator = Sequential()
+    Estimator.add(Conv2D(Nfilters,KernelSize, data_format='channels_last', input_shape=inShape, activation=NAF))
+    Estimator.add(Conv2D(Nfilters//2,KernelSize, activation=NAF))
+    Estimator.add(Conv2D(Nfilters//4,KernelSize, activation=NAF))
+    Estimator.add(Flatten())
+    Estimator.add(Dense(64, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
+    Estimator.add(BatchNormalization(axis=-1, momentum=0.99, epsilon=0.001, center=True, scale=True, beta_initializer='zeros', gamma_initializer='ones', moving_mean_initializer='zeros', moving_variance_initializer='ones', beta_regularizer=None, gamma_regularizer=None, beta_constraint=None, gamma_constraint=None))
+    Estimator.add(Dense(32, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
+    Estimator.add(Dense(16, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
+    Estimator.add(Dense(NClasses+1, kernel_initializer='normal', activation='linear'))
+else:
+    raise Exception('Invalid tile size, only 3,5 and 7 available')
 #Tune an optimiser
 Optim = optimizers.Adam(lr=LearningRate, beta_1=0.9, beta_2=0.999, decay=0.0, amsgrad=True)
 
@@ -321,8 +347,8 @@ if ShowValidation:
                 Valid[n-1]=1
         
         ValidTensor = np.compress(Valid, ValidTensor, axis=3)
-        print(ValidTensor.shape())
-        PredictedPixels = Estimator.predict(ValidationTensor)
+        print(ValidTensor.shape)
+        PredictedPixels = Estimator.predict(ValidTensor)
         PredictedPixels =np.argmax(PredictedPixels, axis=1)
         PredictedClassImage = np.uint8(PredictedPixels.reshape(ValidRaster.shape[0]-size, ValidRaster.shape[1]-size))
         PredictedClassImage[0,0]=1
