@@ -23,6 +23,10 @@ from sklearn.preprocessing import StandardScaler
 from pickle import dump
 import seaborn as sns
 import statsmodels.api as sm
+from skimage import io
+import matplotlib.pyplot as plt
+import matplotlib.colors as colors
+import matplotlib.patches as mpatches
 
 
 
@@ -32,13 +36,14 @@ import statsmodels.api as sm
 MainData = 'E:\\UAV2SEN\\MLdata\\CNNDebug'  #main data output from UAV2SEN_MakeCrispTensor.py. no extensions, will be fleshed out below
 SiteList = 'E:\\UAV2SEN\\SiteList.csv'#this has the lists of sites with name, month, year and 1s and 0s to identify training and validation sites
 ModelName = 'E:\\UAV2SEN\\MLdata\\CNNdebugged.h5'  #Name and location of the final model to be saved
+DatFolder = 'E:\\UAV2SEN\\FinalTif\\'  #location of processed tif files
 TrainingEpochs = 15 #Typically this can be reduced
 Nfilters = 64 #powers of 2 only
 size=5#size of the tensor tiles
 KernelSize=3 # size of the convolution kernels. Caution becasue mis-setting this could cause bugs in the network definition.  Best keep at 3.
 UT=1.95# upper and lower thresholds to elimninate pure classes from fuzzy error estimates if needed
 LT=-0.05
-
+ShowValidation = True
 
 FeatureSet =  ['B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12'] # pick predictor bands from: ['B1','B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12']
 LabelSet = ['WaterMem', 'VegMem','SedMem' ]
@@ -47,6 +52,29 @@ Chatty = 1 # set the verbosity of the model training.
 NAF = 'relu' #NN activation function
 
 DoHistory = False #Plot the history of the training losses
+
+
+#################################################################################
+'''Function definitions'''
+def slide_raster_to_tiles(im, size):
+    h=im.shape[0]
+    w=im.shape[1]
+    di=im.shape[2]
+    TileTensor = np.zeros(((h-size)*(w-size), size,size,di))
+
+    
+    B=0
+    for y in range(0, h-size):
+        for x in range(0, w-size):
+
+            TileTensor[B,:,:,:] = im[y:y+size,x:x+size,:]
+            B+=1
+
+    return TileTensor
+
+
+####################################################################################
+    
 
 '''Load the tensors and filter out the required training and validation data.'''
 TensorFileName = MainData+'_fuzzy_'+str(size)+'_T.npy'
@@ -140,7 +168,7 @@ inShape = TrainingTensor.shape[1:]
 # define the very deep model with L2 regularization and dropout
 
  	# create model
-if size==3 
+if size==3: 
     Estimator = Sequential()
     Estimator.add(Conv2D(Nfilters,KernelSize, data_format='channels_last', input_shape=inShape, activation=NAF))
     Estimator.add(Flatten())
@@ -148,31 +176,31 @@ if size==3
     Estimator.add(BatchNormalization(axis=-1, momentum=0.99, epsilon=0.001, center=True, scale=True, beta_initializer='zeros', gamma_initializer='ones', moving_mean_initializer='zeros', moving_variance_initializer='ones', beta_regularizer=None, gamma_regularizer=None, beta_constraint=None, gamma_constraint=None))
     Estimator.add(Dense(32, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
     Estimator.add(Dense(16, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
-    Estimator.add(Dense(NClasses, kernel_initializer='normal', activation='linear'))    
+    Estimator.add(Dense(NClasses+1, kernel_initializer='normal', activation='linear'))    
 
 
 elif size==5:
     Estimator = Sequential()
     Estimator.add(Conv2D(Nfilters,KernelSize, data_format='channels_last', input_shape=inShape, activation=NAF))
-    Estimator.add(Conv2D(Nfilters/2,KernelSize, activation=NAF))
+    Estimator.add(Conv2D(Nfilters//2,KernelSize, activation=NAF))
     Estimator.add(Flatten())
     Estimator.add(Dense(64, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
     Estimator.add(BatchNormalization(axis=-1, momentum=0.99, epsilon=0.001, center=True, scale=True, beta_initializer='zeros', gamma_initializer='ones', moving_mean_initializer='zeros', moving_variance_initializer='ones', beta_regularizer=None, gamma_regularizer=None, beta_constraint=None, gamma_constraint=None))
     Estimator.add(Dense(32, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
     Estimator.add(Dense(16, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
-    Estimator.add(Dense(NClasses, kernel_initializer='normal', activation='linear'))
+    Estimator.add(Dense(NClasses+1, kernel_initializer='normal', activation='linear'))
     
 elif size==7:
     Estimator = Sequential()
     Estimator.add(Conv2D(Nfilters,KernelSize, data_format='channels_last', input_shape=inShape, activation=NAF))
-    Estimator.add(Conv2D(Nfilters/2,KernelSize, activation=NAF))
-    Estimator.add(Conv2D(Nfilters/4,KernelSize, activation=NAF))
+    Estimator.add(Conv2D(Nfilters//2,KernelSize, activation=NAF))
+    Estimator.add(Conv2D(Nfilters//4,KernelSize, activation=NAF))
     Estimator.add(Flatten())
     Estimator.add(Dense(64, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
     Estimator.add(BatchNormalization(axis=-1, momentum=0.99, epsilon=0.001, center=True, scale=True, beta_initializer='zeros', gamma_initializer='ones', moving_mean_initializer='zeros', moving_variance_initializer='ones', beta_regularizer=None, gamma_regularizer=None, beta_constraint=None, gamma_constraint=None))
     Estimator.add(Dense(32, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
     Estimator.add(Dense(16, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
-    Estimator.add(Dense(NClasses, kernel_initializer='normal', activation='linear'))
+    Estimator.add(Dense(NClasses+1, kernel_initializer='normal', activation='linear'))
 else:
     raise Exception('Invalid tile size, only 3,5 and 7 available')
 
@@ -318,3 +346,38 @@ X=sm.add_constant(ErrFrame3['C3 Obs'])
 linemodel = sm.OLS(ErrFrame3['C3 Pred'], X)
 reg = linemodel.fit()
 print(reg.summary())#
+
+
+'''Show the classified validation images'''
+if ShowValidation:
+    for s in range(len(ValidationSites.index)):
+        ValidRasterName = DatFolder+ValidationSites.Abbrev[s]+'_'+str(ValidationSites.Month[s])+'_'+str(ValidationSites.Year[s])+'_S2.tif'
+        ValidRaster = io.imread(ValidRasterName)
+        ValidTensor = slide_raster_to_tiles(ValidRaster, size)
+        Valid=np.zeros(12)
+        for n in range(1,13):
+            if ('B'+str(n)) in FeatureSet:
+                Valid[n-1]=1
+        
+        ValidTensor = np.compress(Valid, ValidTensor, axis=3)
+        print(ValidTensor.shape)
+        PredictedPixels = Estimator.predict(ValidTensor)
+        
+
+        PredictedWaterImage = np.uint8(255*PredictedPixels[:,0].reshape(ValidRaster.shape[0]-size, ValidRaster.shape[1]-size))
+        PredictedVegImage = np.uint8(255*PredictedPixels[:,1].reshape(ValidRaster.shape[0]-size, ValidRaster.shape[1]-size))
+        PredictedSedImage = np.uint8(255*PredictedPixels[:,2].reshape(ValidRaster.shape[0]-size, ValidRaster.shape[1]-size))
+        PredictedClassImage=np.concat((PredictedSedImage,PredictedVegImage,PredictedWaterImage), axis=2)
+
+        cmapCHM = colors.ListedColormap(['black','red','green','blue'])
+        plt.figure()
+        plt.imshow(PredictedClassImage)
+        
+        class1_box = mpatches.Patch(color='red', label='Sediment')
+        class2_box = mpatches.Patch(color='green', label='Veg.')
+        class3_box = mpatches.Patch(color='blue', label='Water')
+        ax=plt.gca()
+        ax.legend(handles=[class1_box,class2_box,class3_box])
+        plt.title(ValidRasterName)
+
+
