@@ -34,7 +34,7 @@ size=5
 
 
 #Output location
-Outfile = 'E:\\UAV2SEN\\MLdata\\FullData_4xnoise' #no extensions needed, added later
+Outfile = 'E:\\UAV2SEN\\MLdata\\FullData_2x' #no extensions needed, added later
 
 '''Functions'''
 def map2pix(rasterfile,xmap,ymap):
@@ -165,9 +165,9 @@ for s in range(len(SiteDF.Site)):
         
     dataspots = LabelDF.VegMem != -1 #finds whre valid data was extracted
     numel = np.sum(dataspots)
-    AugLabel = np.zeros((4*numel,6))
+    AugLabel = np.zeros((2*numel,6))
     AugLabelDF = pd.DataFrame(data=AugLabel, columns=['VegMem','WaterMem','SedMem','Month','Year','Site'])
-    AugTensor = np.zeros((4*numel, size,size,Ti.shape[3]))
+    AugTensor = np.zeros((2*numel, size,size,Ti.shape[3]))
     
     
     #assemble valid data and add a bit of data augmentation with three 90 degree rotations
@@ -177,21 +177,21 @@ for s in range(len(SiteDF.Site)):
             AugTensor[E,:,:,:]=Ti[n,:,:,:]
             AugLabelDF.iloc[E] = LabelDF.iloc[n]
             E+=1
-            noise=0.001*np.random.random((1,size,size,12))
+            #noise=0.001*np.random.random((1,size,size,12))
             Irotated = np.rot90(Ti[n,:,:,:])
-            AugTensor[E,:,:,:]=Irotated + noise
+            AugTensor[E,:,:,:]=Irotated# + noise
             AugLabelDF.iloc[E] = LabelDF.iloc[n]
             E+=1
-            noise=0.001*np.random.random((1,size,size,12))
-            Irotated = np.rot90(Irotated)
-            AugTensor[E,:,:,:]=Irotated + noise
-            AugLabelDF.iloc[E] = LabelDF.iloc[n]
-            E+=1
-            noise=0.001*np.random.random((1,size,size,12))
-            Irotated = np.rot90(Irotated)
-            AugTensor[E,:,:,:]=Irotated + noise
-            AugLabelDF.iloc[E] = LabelDF.iloc[n]
-            E+=1
+#            noise=0.001*np.random.random((1,size,size,12))
+#            Irotated = np.rot90(Irotated)
+#            AugTensor[E,:,:,:]=Irotated + noise
+#            AugLabelDF.iloc[E] = LabelDF.iloc[n]
+#            E+=1
+#            noise=0.001*np.random.random((1,size,size,12))
+#            Irotated = np.rot90(Irotated)
+#            AugTensor[E,:,:,:]=Irotated + noise
+#            AugLabelDF.iloc[E] = LabelDF.iloc[n]
+#            E+=1
     MasterLabelDF = pd.concat([MasterLabelDF, AugLabelDF])
     MasterTensor = np.concatenate((MasterTensor, AugTensor), axis=0)
 
@@ -199,7 +199,7 @@ for s in range(len(SiteDF.Site)):
         
 #Clean up the final DFs for export    
 MasterLabelDF = MasterLabelDF[MasterLabelDF.Site != 'none']
-MasterLabelDF.index = range(0,len(MasterLabelDF.VegMem))
+#MasterLabelDF.index = range(0,len(MasterLabelDF.VegMem))
 MasterTensor = MasterTensor[1:,:,:,:]
 
 
