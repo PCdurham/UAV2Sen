@@ -34,7 +34,7 @@ size=5
 
 
 #Output location
-Outfile = 'E:\\UAV2SEN\\MLdata\\CNNDebug' #no extensions needed, added later
+Outfile = 'E:\\UAV2SEN\\MLdata\\FullData_4xnoise' #no extensions needed, added later
 
 '''Functions'''
 def map2pix(rasterfile,xmap,ymap):
@@ -205,9 +205,9 @@ MasterTensor = MasterTensor[1:,:,:,:]
 
 #export to feather for the DF and numpy for the tensor
 OutTrain = Outfile +'_fuzzy_'+str(size)+'_T.npy'
-OutLabel =  Outfile+'_fuzzy_'+str(size)+'_L.dat'   
+OutLabel =  Outfile+'_fuzzy_'+str(size)+'_L.csv'   
 np.save(OutTrain, MasterTensor)
-MasterLabelDF.to_feather(OutLabel)
+MasterLabelDF.to_csv(OutLabel)
 
 
       
