@@ -32,12 +32,12 @@ import statsmodels.api as sm
 MainData = 'E:\\UAV2SEN\\MLdata\\CNNDebug'  #main data output from UAV2SEN_MakeCrispTensor.py. no extensions, will be fleshed out below
 SiteList = 'E:\\UAV2SEN\\SiteList.csv'#this has the lists of sites with name, month, year and 1s and 0s to identify training and validation sites
 ModelName = 'E:\\UAV2SEN\\MLdata\\CNNdebugged.h5'  #Name and location of the final model to be saved
-TrainingEpochs = 100 #Typically this can be reduced
-Nfilters = 32
+TrainingEpochs = 15 #Typically this can be reduced
+Nfilters = 64
 size=5#size of the tensor tiles
-KernelSize=5 # size of the convolution kernels
-UT=0.95# upper and lower thresholds to elimn=inate pure classes from fuzzy error estimates
-LT=0.05
+KernelSize=3 # size of the convolution kernels
+UT=1.95# upper and lower thresholds to elimn=inate pure classes from fuzzy error estimates
+LT=-0.05
 
 
 FeatureSet =  ['B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12'] # pick predictor bands from: ['B1','B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12']
@@ -71,42 +71,39 @@ MasterTensor = np.compress(Valid, MasterTensor, axis=3)
 #Start the filter process to isolate training and validation data
 TrainingSites = SiteDF[SiteDF.Training == 1]
 ValidationSites = SiteDF[SiteDF.Validation == 1]
+TrainingSites.index = range(0,len(TrainingSites.Year))
+ValidationSites.index = range(0,len(ValidationSites.Year))
+#initialise the training and validation DFs to the master
+TrainingDF = MasterLabelDF
+TrainingTensor = MasterTensor
+ValidationDF = MasterLabelDF
+ValidationTensor = MasterTensor
 
-#isolate the site. first labels then tensors
-TrainDF = MasterLabelDF[MasterLabelDF['Site'].isin(TrainingSites.Abbrev.to_list())]
-ValidationDF = MasterLabelDF[MasterLabelDF['Site'].isin(ValidationSites.Abbrev.to_list())]
+#isolate the sites, months and year and isolate the associated tensor values
+MasterValid = (np.zeros(len(MasterLabelDF.index)))==1
+for s in range(len(TrainingSites.Site)):
+    Valid = (TrainingDF.Site == TrainingSites.Abbrev[s])&(TrainingDF.Year==TrainingSites.Year[s])&(TrainingDF.Month==TrainingSites.Month[s])
+    MasterValid = MasterValid | Valid
+    
+TrainingDF = TrainingDF.loc[MasterValid]
+TrainingTensor=np.compress(MasterValid,TrainingTensor, axis=0)#will delete where valid is false
 
-Valid = MasterLabelDF['Site'].isin(TrainingSites.Abbrev.to_list())
-TrainingTensor = np.compress(Valid, MasterTensor, axis=0)
-Valid = MasterLabelDF['Site'].isin(ValidationSites.Abbrev.to_list())
-ValidationTensor = np.compress(Valid, MasterTensor, axis=0)
+MasterValid = (np.zeros(len(MasterLabelDF.index)))
+for s in range(len(ValidationSites.Site)):
+    Valid = (ValidationDF.Site == ValidationSites.Abbrev[s])&(ValidationDF.Year==ValidationSites.Year[s])&(ValidationDF.Month==ValidationSites.Month[s])
+    MasterValid = MasterValid | Valid
+    
+ValidationDF = ValidationDF.loc[MasterValid]
+ValidationTensor = np.compress(MasterValid,ValidationTensor, axis=0)#will delete where valid is false 
 
-#isolate the year
-TrainDF = TrainDF[TrainDF['Year'].isin(TrainingSites.Year.to_list())]
-ValidationDF = ValidationDF[ValidationDF['Year'].isin(ValidationSites.Year.to_list())]
-
-Valid= TrainDF['Year'].isin(TrainingSites.Year.to_list())
-TrainingTensor = np.compress(Valid, TrainingTensor, axis=0)
-Valid = ValidationDF['Year'].isin(ValidationSites.Year.to_list())
-ValidationTensor = np.compress(Valid, ValidationTensor, axis=0)
-
-
-#isolate the month
-TrainDF = TrainDF[TrainDF['Month'].isin(TrainingSites.Month.to_list())]
-ValidationDF = ValidationDF[ValidationDF['Month'].isin(ValidationSites.Month.to_list())]
-
-Valid= TrainDF['Month'].isin(TrainingSites.Month.to_list())
-TrainingTensor = np.compress(Valid, TrainingTensor, axis=0)
-Valid = ValidationDF['Month'].isin(ValidationSites.Month.to_list())
-ValidationTensor = np.compress(Valid, ValidationTensor, axis=0)
 
 #Set the labels
-TrainLabels = TrainDF[LabelSet]
+TrainingLabels = TrainingDF[LabelSet]
 ValidationLabels = ValidationDF[LabelSet]
     
 #check for empty dataframes and raise an error if found
 
-if (len(TrainDF.index)==0):
+if (len(TrainingDF.index)==0):
     raise Exception('There is an empty dataframe for TRAINING')
     
 if (len(ValidationDF.index)==0):
@@ -114,7 +111,7 @@ if (len(ValidationDF.index)==0):
     
 #Check that tensor lengths match label lengths
 
-if (len(TrainLabels.index)) != TrainingTensor.shape[0]:
+if (len(TrainingLabels.index)) != TrainingTensor.shape[0]:
     raise Exception('Sample number mismatch for TRAINING tensor and labels')
     
 if (len(ValidationLabels.index)) != ValidationTensor.shape[0]:
@@ -149,7 +146,7 @@ inShape = TrainingTensor.shape[1:]
  	# create model
 Estimator = Sequential()
 Estimator.add(Conv2D(Nfilters,KernelSize, data_format='channels_last', input_shape=inShape, activation=NAF))
-#Estimator.add(Conv2D(Nfilters,KernelSize, activation=NAF))
+Estimator.add(Conv2D(Nfilters,KernelSize, activation=NAF))
 Estimator.add(Flatten())
 Estimator.add(Dense(64, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
 Estimator.add(BatchNormalization(axis=-1, momentum=0.99, epsilon=0.001, center=True, scale=True, beta_initializer='zeros', gamma_initializer='ones', moving_mean_initializer='zeros', moving_variance_initializer='ones', beta_regularizer=None, gamma_regularizer=None, beta_constraint=None, gamma_constraint=None))
@@ -167,7 +164,7 @@ Estimator.summary()
 ###############################################################################
 """Data Fitting"""
 
-X_train, X_test, y_train, y_test = train_test_split(TrainingTensor, TrainLabels, test_size=0.2, random_state=42)
+X_train, X_test, y_train, y_test = train_test_split(TrainingTensor, TrainingLabels, test_size=0.2, random_state=42)
 print('Fitting CNN Classifier on ' + str(len(X_train)) + ' pixels')
 Estimator.fit(X_train, y_train, batch_size=1000, epochs=TrainingEpochs, verbose=Chatty)#, class_weight=weights)
 #EstimatorRF.fit(X_train, y_train)
@@ -191,23 +188,23 @@ Error3 = PredictedPixels[:,2] - Y.SedMem
 ErrFrame = pd.DataFrame({'C1 Err':Error1, 'C2 Err':Error2, 'C3 Err':Error3, 'C1 Obs':Y.WaterMem, 'C2 Obs':Y.VegMem,'C3 Obs':Y.SedMem, 'C1 Pred':PredictedPixels[:,0], 'C2 Pred':PredictedPixels[:,1],'C3 Pred':PredictedPixels[:,2]})
 ErrFrame1 = ErrFrame[ErrFrame['C1 Obs']<UT]
 ErrFrame1 = ErrFrame1[ErrFrame1['C1 Obs']>LT]
-jplot = sns.jointplot("C1 Obs", 'C1 Pred', data=ErrFrame1, kind="kde", color='b', n_levels=500)
-jplot.ax_marg_x.set_xlim(-0.2, 1.2)
-jplot.ax_marg_y.set_ylim(-0.2, 1.2)
+#jplot = sns.jointplot("C1 Obs", 'C1 Pred', data=ErrFrame1, kind="hex", color='b', n_levels=500)
+#jplot.ax_marg_x.set_xlim(-0.2, 1.2)
+#jplot.ax_marg_y.set_ylim(-0.2, 1.2)
 
 
 ErrFrame2 = ErrFrame[ErrFrame['C2 Obs']<UT]
 ErrFrame2 = ErrFrame2[ErrFrame2['C2 Obs']>LT]
-jplot = sns.jointplot("C2 Obs", 'C2 Pred', data=ErrFrame2, kind="kde", color='g', n_levels=500)
-jplot.ax_marg_x.set_xlim(-0.2, 1.2)
-jplot.ax_marg_y.set_ylim(-0.2, 1.2)
+#jplot = sns.jointplot("C2 Obs", 'C2 Pred', data=ErrFrame2, kind="hex", color='g', n_levels=500)
+#jplot.ax_marg_x.set_xlim(-0.2, 1.2)
+#jplot.ax_marg_y.set_ylim(-0.2, 1.2)
 
 
 ErrFrame3 = ErrFrame[ErrFrame['C3 Obs']<UT]
 ErrFrame3 = ErrFrame3[ErrFrame3['C3 Obs']>LT]
-jplot = sns.jointplot("C3 Obs", 'C3 Pred', data=ErrFrame3, kind="kde", color='r', n_levels=500)
-jplot.ax_marg_x.set_xlim(-0.2, 1.2)
-jplot.ax_marg_y.set_ylim(-0.2, 1.2)
+#jplot = sns.jointplot("C3 Obs", 'C3 Pred', data=ErrFrame3, kind="hex", color='r', n_levels=500)
+#jplot.ax_marg_x.set_xlim(-0.2, 1.2)
+#jplot.ax_marg_y.set_ylim(-0.2, 1.2)
 
 
 Error1 = ErrFrame1['C1 Err']
@@ -252,23 +249,23 @@ Error3 = PredictedPixels[:,2] - Y.SedMem
 ErrFrame = pd.DataFrame({'C1 Err':Error1, 'C2 Err':Error2, 'C3 Err':Error3, 'C1 Obs':Y.WaterMem, 'C2 Obs':Y.VegMem,'C3 Obs':Y.SedMem, 'C1 Pred':PredictedPixels[:,0], 'C2 Pred':PredictedPixels[:,1],'C3 Pred':PredictedPixels[:,2]})
 ErrFrame1 = ErrFrame[ErrFrame['C1 Obs']<UT]
 ErrFrame1 = ErrFrame1[ErrFrame1['C1 Obs']>LT]
-jplot = sns.jointplot("C1 Obs", 'C1 Pred', data=ErrFrame1, kind="kde", color='b', n_levels=500)
-jplot.ax_marg_x.set_xlim(-0.2, 1.2)
-jplot.ax_marg_y.set_ylim(-0.2, 1.2)
+#jplot = sns.jointplot("C1 Obs", 'C1 Pred', data=ErrFrame1, kind="kde", color='b', n_levels=500)
+#jplot.ax_marg_x.set_xlim(-0.2, 1.2)
+#jplot.ax_marg_y.set_ylim(-0.2, 1.2)
 
 
 ErrFrame2 = ErrFrame[ErrFrame['C2 Obs']<UT]
 ErrFrame2 = ErrFrame2[ErrFrame2['C2 Obs']>LT]
-jplot = sns.jointplot("C2 Obs", 'C2 Pred', data=ErrFrame2, kind="kde", color='g', n_levels=500)
-jplot.ax_marg_x.set_xlim(-0.2, 1.2)
-jplot.ax_marg_y.set_ylim(-0.2, 1.2)
+#jplot = sns.jointplot("C2 Obs", 'C2 Pred', data=ErrFrame2, kind="kde", color='g', n_levels=500)
+#jplot.ax_marg_x.set_xlim(-0.2, 1.2)
+#jplot.ax_marg_y.set_ylim(-0.2, 1.2)
 
 
 ErrFrame3 = ErrFrame[ErrFrame['C3 Obs']<UT]
 ErrFrame3 = ErrFrame3[ErrFrame3['C3 Obs']>LT]
-jplot = sns.jointplot("C3 Obs", 'C3 Pred', data=ErrFrame3, kind="kde", color='r', n_levels=500)
-jplot.ax_marg_x.set_xlim(-0.2, 1.2)
-jplot.ax_marg_y.set_ylim(-0.2, 1.2)
+#jplot = sns.jointplot("C3 Obs", 'C3 Pred', data=ErrFrame3, kind="kde", color='r', n_levels=500)
+#jplot.ax_marg_x.set_xlim(-0.2, 1.2)
+#jplot.ax_marg_y.set_ylim(-0.2, 1.2)
 
 
 Error1 = ErrFrame1['C1 Err']
