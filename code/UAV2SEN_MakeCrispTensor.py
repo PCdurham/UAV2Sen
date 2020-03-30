@@ -278,7 +278,7 @@ MasterTensor = MasterTensor[1:,:,:,:]
 
 
 
-MasterLabelDF.index = range(0,len(MasterLabelDF.RelMajClass))
+#MasterLabelDF.index = range(0,len(MasterLabelDF.RelMajClass))
 
 
 
