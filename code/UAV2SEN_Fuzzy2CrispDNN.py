@@ -8,55 +8,125 @@ __license__ = 'MIT'
 
 ###############################################################################
 """ Libraries"""
-from keras import regularizers
-from keras import optimizers
+from tensorflow.keras import regularizers
+from tensorflow.keras import optimizers
 import numpy as np
 import pandas as pd
-from keras.models import Sequential
-from keras.layers import Dense, BatchNormalization
-from keras.wrappers.scikit_learn import KerasRegressor
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, BatchNormalization
+from tensorflow.keras.wrappers.scikit_learn import KerasRegressor
+from tensorflow.keras.utils import to_categorical
+from sklearn import metrics
 from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from pickle import dump
+import seaborn as sns
+import statsmodels.api as sm
 
 
 
 
 #############################################################
-"""User data input. Fill in the info below before running"""
+"""User data input. Use the site template and list training and validation choices"""
 #############################################################
-DF=pd.read_feather('F:\MixClass\\ESEXpaper_FuzzyMaster_ArboVal.dat') #pre-compiled master dataframe in feather format. 
+MainData = 'E:\\UAV2SEN\\MLdata\\CNNDebug'  #main data output from UAV2SEN_MakeCrispTensor.py. no extensions, will be fleshed out below
+SiteList = 'E:\\UAV2SEN\\SiteList.csv'#this has the lists of sites with name, month, year and 1s and 0s to identify training and validation sites
+DatFolder = 'E:\\UAV2SEN\\FinalTif\\'  #location of above
+TrainingEpochs = 100 #Typically this can be reduced
+size=3 #size of the tiles used to compile the data
 
-
-'''BASIC PARAMETER CHOICES'''
-
-TrainingEpochs = 150 #For NN only
-TTS = 0.0001 #Train test split fraction in test. Keep at 10E-4 if not using
-NClasses = 3  #The number of end members in the fuzzy class
-
-
-'''Build data''' 
-
-Train_DF = DF[DF.Type=='Train']
-FeatureSet = ['B1', 'B2', 'B3', 'B4', 'B5', 'B6', 'B7', 'B8', 'B9','B11', 'B12']
-Train_Features = Train_DF[FeatureSet] #['B1', 'B2', 'B3', 'B4', 'B5', 'B6', 'B7', 'B8', 'B9','B11', 'B12']
-Train_Labels = Train_DF[['Mship1', 'Mship2','Mship3']]
-
-
-'''MODEL PARAMETERS''' #These would usually not be edited
- 
-Ndims = len(Train_Features.columns) # Feature Dimensions. 4 if using entropy in phase 2, 3 if just RGB
+FeatureSet = ['B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12'] # pick predictor bands from: ['B1','B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12']
+LabelSet = ['WaterMem', 'VegMem','SedMem' ]
 LearningRate = 0.0001
-Chatty = 1 # set the verbosity of the model training.  Use 1 at first, 0 when confident that model is well tuned
+Chatty = 1 # set the verbosity of the model training. 
+UT=0.95# upper and lower thresholds to elimn=inate pure classes from fuzzy error estimates
+LT=0.05
 
 
+'''Load the tensors, remove data augmentation meant for CNNs, squeeze to get single pixel values and filter out the required training and validation data.'''
+TensorFileName = MainData+'_fuzzy_'+str(size)+'_T.npy'
+LabelFileName = MainData+'_fuzzy_'+str(size)+'_L.dat'
+
+SiteDF = pd.read_csv(SiteList)
+Tensor = np.load(TensorFileName)
+MasterLabelDF=pd.read_feather(LabelFileName)
+
+#Remove the 4X data augmentation only relevant to the CNNs and take only points 0,4,8,etc...
+PointNums = np.asarray(range(0,len(MasterLabelDF.index)))
+Spots = PointNums%2
+Valid = Spots==0
+
+#Subsample the labels and fix the index
+MasterLabelDF = MasterLabelDF.loc[Valid]
+MasterLabelDF.index = range(0,len(MasterLabelDF.index))
+
+#Subsample the tensor
+Tensor = np.compress(Valid, Tensor, axis=0)
+
+#get the central pixels in the tensor to transform this into pixel-based data for the non-convolutional NN
+Middle = Tensor.shape[1]//2
+PixelData = np.squeeze(Tensor[:,Middle, Middle,:])
+PixelDF = pd.DataFrame(data=PixelData, columns=['B1','B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12'])
+MasterLabelDF = pd.concat([MasterLabelDF, PixelDF], axis=1)
+
+#Start the filter process to isolate training and validation data
+TrainingSites = SiteDF[SiteDF.Training == 1]
+ValidationSites = SiteDF[SiteDF.Validation == 1]
+
+
+#isolate the site
+TrainDF = MasterLabelDF[MasterLabelDF['Site'].isin(TrainingSites.Abbrev.to_list())]
+ValidationDF = MasterLabelDF[MasterLabelDF['Site'].isin(ValidationSites.Abbrev.to_list())]
+
+#isolate the year
+TrainDF = TrainDF[TrainDF['Year'].isin(TrainingSites.Year.to_list())]
+ValidationDF = ValidationDF[ValidationDF['Year'].isin(ValidationSites.Year.to_list())]
+
+#isolate the month
+TrainDF = TrainDF[TrainDF['Month'].isin(TrainingSites.Month.to_list())]
+ValidationDF = ValidationDF[ValidationDF['Month'].isin(ValidationSites.Month.to_list())]
+
+#Set the labels
+TrainFeatures = TrainDF[FeatureSet]
+ValidationFeatures = ValidationDF[FeatureSet]
+TrainLabels = TrainDF[LabelSet]
+ValidationLabels = ValidationDF[LabelSet]
+    
+#check for empty dataframes and raise an error if found
+
+if (len(TrainDF.B1)==0):
+    raise Exception('There is an empty dataframe for training')
+    
+if (len(ValidationDF.B1)==0):
+    raise Exception('There is an empty dataframe for validation')
+    
+
+
+        
+    
+'''Normalise and scale the band values'''
+Scaler = StandardScaler()
+Scaler.fit(TrainFeatures)
+TrainFeatures = Scaler.transform(TrainFeatures)
+ValidationFeatures = Scaler.transform(ValidationFeatures)
+
+ 
+Ndims = TrainFeatures.shape[1] # Feature Dimensions. 
+NClasses = 3  #The number of classes in the data. This MUST be the same as the classes used to retrain the model
 
 
 
 
 
 ##############################################################################
-"""Instantiate Neural Network""" 
+"""Instantiate the Neural Network pixel-based regressor""" 
+#EstimatorRF = RFC(n_estimators = 150, n_jobs = 8, verbose = Chatty) #adjust this to your processors
    
-	# create model
+
+
+# define the very deep model with L2 regularization and dropout
+
+ 	# create model
 def DNN_model_L2D():
 	# create model
     model = Sequential()
@@ -74,37 +144,89 @@ def DNN_model_L2D():
     
     # Compile model
     model.compile(loss='mean_squared_error', optimizer=Optim, metrics = ['accuracy'])
-    #model.summary()
+    model.summary()
     return model
 
 
 
     
 
-Estimator = KerasRegressor(build_fn=DNN_model_L2D, epochs=TrainingEpochs, batch_size=5000, verbose=Chatty)
+Estimator = KerasRegressor(build_fn=DNN_model_L2D, epochs=TrainingEpochs, batch_size=1000, verbose=Chatty)
 
-
-
-
-
-
+  
 ###############################################################################
-"""Data"""
-
-
-X = np.asarray(Train_Features) 
-Y = np.asarray(Train_Labels)
- 
-
-X_train, X_test, y_train, y_test = train_test_split(X, Y, test_size=TTS, random_state=101)
-
-
+"""Data Fitting"""
+#TrainLabels1Hot = to_categorical(TrainLabels)
+#ValidationLabels1Hot = to_categorical(ValidationLabels)
+X_train, X_test, y_train, y_test = train_test_split(TrainFeatures, TrainLabels, test_size=0.2, random_state=42)
+print('Fitting MLP Classifier on ' + str(len(X_train)) + ' pixels')
+Estimator.fit(X_train, y_train, batch_size=1000, epochs=TrainingEpochs, verbose=Chatty)#, class_weight=weights)
+#EstimatorRF.fit(X_train, y_train)
+    
 
 
 
-print('Fitting NN fuzzy regressor on ' + str(len(X_train)) + ' pixels')
-Estimator.fit(X_train, y_train, batch_size=5000, epochs=TrainingEpochs, verbose=Chatty)#, class_weight=weights)
+'''Validate the model by crisping up the test and validation data and predicting classes instead of memberships'''
+#Test data
+PredictedPixels = Estimator.predict(X_test)
+Y=y_test
 
-print('Fuzzy DNN model trained, use other scripts to test validation data')  
+##See if the dominant class is predicted correctly with F1
+ClassPredicted = 1+np.argmax(PredictedPixels, axis=1)
+ClassTrue = 1+np.argmax(Y,axis=1)
 
- 
+report = metrics.classification_report(ClassTrue, ClassPredicted, digits = 3)
+print('TESTING results for relative majority ')
+print(report)
+print('\n \n')
+
+ClassPredicted = 1+np.argmax(PredictedPixels, axis=1)
+ClassPredicted = ClassPredicted[np.max(Y, axis=1)>0.50]
+Z = Y[np.max(Y, axis=1)>0.75]
+ClassTrue = 1+np.argmax(Z,axis=1)
+report = metrics.classification_report(ClassTrue, ClassPredicted, digits = 3)
+print('TESTING results for majority ')
+print(report)
+print('\n \n')
+
+ClassPredicted = 1+np.argmax(PredictedPixels, axis=1)
+ClassPredicted = ClassPredicted[np.max(Y, axis=1)>0.95]
+Z = Y[np.max(Y, axis=1)>0.95]
+ClassTrue = 1+np.argmax(Z,axis=1)
+report = metrics.classification_report(ClassTrue, ClassPredicted, digits = 3)
+print('TESTING results for pure class  ')
+print(report)
+print('\n \n')
+
+
+#Validation data
+PredictedPixels = Estimator.predict(ValidationFeatures)
+Y=ValidationLabels
+
+##See if the dominant class is predicted correctly with F1
+ClassPredicted = 1+np.argmax(PredictedPixels, axis=1)
+ClassTrue = 1+np.argmax(Y,axis=1)
+
+report = metrics.classification_report(ClassTrue, ClassPredicted, digits = 3)
+print('VALIDATION results for relative majority ')
+print(report)
+print('\n \n')
+
+ClassPredicted = 1+np.argmax(PredictedPixels, axis=1)
+ClassPredicted = ClassPredicted[np.max(Y, axis=1)>0.50]
+Z = Y[np.max(Y, axis=1)>0.75]
+ClassTrue = 1+np.argmax(Z,axis=1)
+report = metrics.classification_report(ClassTrue, ClassPredicted, digits = 3)
+print('VALIDATION results for majority ')
+print(report)
+print('\n \n')
+
+ClassPredicted = 1+np.argmax(PredictedPixels, axis=1)
+ClassPredicted = ClassPredicted[np.max(Y, axis=1)>0.95]
+Z = Y[np.max(Y, axis=1)>0.95]
+ClassTrue = 1+np.argmax(Z,axis=1)
+report = metrics.classification_report(ClassTrue, ClassPredicted, digits = 3)
+print('VALIDATION results for pure class  ')
+print(report)
+print('\n \n')
+    
