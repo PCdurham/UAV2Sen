@@ -27,17 +27,17 @@ from pickle import dump
 #############################################################
 """User data input. Use the site template and list training and validation choices"""
 #############################################################
-MainData = 'E:\\UAV2SEN\\MLdata\\DNNDebug'  #main data output from UAV2SEN_MakeCrispTensor.py. no extensions, will be fleshed out below
+MainData = 'E:\\UAV2SEN\\MLdata\\FullData_4xnoise'  #main data output from UAV2SEN_MakeCrispTensor.py. no extensions, will be fleshed out below
 SiteList = 'E:\\UAV2SEN\\SiteList.csv'#this has the lists of sites with name, month, year and 1s and 0s to identify training and validation sites
 DatFolder = 'E:\\UAV2SEN\\FinalTif\\'  #location of above
-TrainingEpochs = 150 #Typically this can be reduced
+TrainingEpochs = 50 #Typically this can be reduced
 size=5 #size of the tiles used to compile the data
 UAVtrain = True #if true use the UAV class data to train the model, if false use desk-based
 UAVvalid = True #if true use the UAV class data to validate.  If false, use desk-based polygons
 
-MajType= 'Maj' #Majority type. only used if UAVtrain or valid is true. The options are RelMaj (relative majority), Maj (majority) and Pure (95% unanimous).
+MajType= 'Pure' #Majority type. only used if UAVtrain or valid is true. The options are RelMaj (relative majority), Maj (majority) and Pure (95% unanimous).
 
-FeatureSet = ['B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12'] # pick predictor bands from: ['B1','B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12']
+FeatureSet = ['B8','B9','B10','B11','B12'] # pick predictor bands from: ['B1','B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12']
 
 LearningRate = 0.00005
 Chatty = 1 # set the verbosity of the model training. 
@@ -53,16 +53,16 @@ Tensor = np.load(TensorFileName)
 MasterLabelDF=pd.read_csv(LabelFileName)
 
 #Remove the 4X data augmentation only relevant to the CNNs and take only points 0,4,8,etc...
-PointNums = np.asarray(range(0,len(MasterLabelDF.RelMajClass)))
-Spots = PointNums%4
-Valid = Spots==0
-
-#Subsample the labels and fix the index
-MasterLabelDF = MasterLabelDF.loc[Valid]
-MasterLabelDF.index = range(0,len(MasterLabelDF.RelMajClass))
-
-#Subsample the tensor
-Tensor = np.compress(Valid, Tensor, axis=0)
+#PointNums = np.asarray(range(0,len(MasterLabelDF.RelMajClass)))
+#Spots = PointNums%4
+#Valid = Spots==0
+#
+##Subsample the labels and fix the index
+#MasterLabelDF = MasterLabelDF.loc[Valid]
+#MasterLabelDF.index = range(0,len(MasterLabelDF.RelMajClass))
+#
+##Subsample the tensor
+#Tensor = np.compress(Valid, Tensor, axis=0)
 
 #get the central pixels in the tensor to transform this into pixel-based data for the non-convolutional NN
 Middle = Tensor.shape[1]//2
@@ -86,6 +86,11 @@ ValidationDF = ValidationDF[ValidationDF['Year'].isin(ValidationSites.Year.to_li
 #isolate the month
 TrainDF = TrainDF[TrainDF['Month'].isin(TrainingSites.Month.to_list())]
 ValidationDF = ValidationDF[ValidationDF['Month'].isin(ValidationSites.Month.to_list())]
+
+
+
+
+
 
 #select desk-based or UAV-based for training and validation, if using UAV data, select the majority type
 if UAVtrain & UAVvalid:
@@ -204,7 +209,7 @@ def nodrop_model_L2D():
     model.add(Dense(64, kernel_regularizer= regularizers.l2(0.001), input_dim=Ndims, kernel_initializer='normal', activation='relu'))
     #model.add(Dense(32, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation='relu'))
     
-    #model.add(BatchNormalization(axis=-1, momentum=0.99, epsilon=0.001, center=True, scale=True, beta_initializer='zeros', gamma_initializer='ones', moving_mean_initializer='zeros', moving_variance_initializer='ones', beta_regularizer=None, gamma_regularizer=None, beta_constraint=None, gamma_constraint=None))
+    model.add(BatchNormalization(axis=-1, momentum=0.99, epsilon=0.001, center=True, scale=True, beta_initializer='zeros', gamma_initializer='ones', moving_mean_initializer='zeros', moving_variance_initializer='ones', beta_regularizer=None, gamma_regularizer=None, beta_constraint=None, gamma_constraint=None))
     
     model.add(Dense(32, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation='relu'))
     model.add(Dense(16, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation='relu'))
