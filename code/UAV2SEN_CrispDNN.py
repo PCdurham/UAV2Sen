@@ -19,7 +19,10 @@ from tensorflow.keras.utils import to_categorical
 from sklearn import metrics
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
-from pickle import dump
+from skimage import io
+import matplotlib.pyplot as plt
+import matplotlib.colors as colors
+import matplotlib.patches as mpatches
 
 
 
@@ -27,14 +30,14 @@ from pickle import dump
 #############################################################
 """User data input. Use the site template and list training and validation choices"""
 #############################################################
-MainData = 'E:\\UAV2SEN\\MLdata\\FullData_4xnoise'  #main data output from UAV2SEN_MakeCrispTensor.py. no extensions, will be fleshed out below
-SiteList = 'E:\\UAV2SEN\\SiteList.csv'#this has the lists of sites with name, month, year and 1s and 0s to identify training and validation sites
-DatFolder = 'E:\\UAV2SEN\\FinalTif\\'  #location of above
+MainData = 'E:\\MLdata\\FullData_4xnoise'  #main data output from UAV2SEN_MakeCrispTensor.py. no extensions, will be fleshed out below
+SiteList = 'E:\\SiteList.csv'#this has the lists of sites with name, month, year and 1s and 0s to identify training and validation sites
+DatFolder = 'E:\\FinalTif\\'  #location of above
 TrainingEpochs = 50 #Typically this can be reduced
 size=5 #size of the tiles used to compile the data
 UAVtrain = True #if true use the UAV class data to train the model, if false use desk-based
 UAVvalid = True #if true use the UAV class data to validate.  If false, use desk-based polygons
-
+ShowValidation = True #if true will show predicted class rasters for validation images from the site list
 MajType= 'Pure' #Majority type. only used if UAVtrain or valid is true. The options are RelMaj (relative majority), Maj (majority) and Pure (95% unanimous).
 
 FeatureSet = ['B8','B9','B10','B11','B12'] # pick predictor bands from: ['B1','B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12']
@@ -42,8 +45,26 @@ FeatureSet = ['B8','B9','B10','B11','B12'] # pick predictor bands from: ['B1','B
 LearningRate = 0.00005
 Chatty = 1 # set the verbosity of the model training. 
 
+#################################################################################
+'''Function definitions'''
+def slide_raster_to_tiles(im, size):
+    h=im.shape[0]
+    w=im.shape[1]
+    di=im.shape[2]
+    TileTensor = np.zeros(((h-size)*(w-size), size,size,di))
+
+    
+    B=0
+    for y in range(0, h-size):
+        for x in range(0, w-size):
+
+            TileTensor[B,:,:,:] = im[y:y+size,x:x+size,:]
+            B+=1
+
+    return TileTensor
 
 
+####################################################################################
 '''Load the tensors, remove data augmentation meant for CNNs, squeeze to get single pixel values and filter out the required training and validation data.'''
 TensorFileName = MainData+'_crisp_'+str(size)+'_T.npy'
 LabelFileName = MainData+'_crisp_'+str(size)+'_L.csv'
@@ -73,7 +94,8 @@ MasterLabelDF = pd.concat([MasterLabelDF, PixelDF], axis=1)
 #Start the filter process to isolate training and validation data
 TrainingSites = SiteDF[SiteDF.Training == 1]
 ValidationSites = SiteDF[SiteDF.Validation == 1]
-
+TrainingSites.index = range(0,len(TrainingSites.Year))
+ValidationSites.index = range(0,len(ValidationSites.Year))
 
 #isolate the site
 TrainDF = MasterLabelDF[MasterLabelDF['Site'].isin(TrainingSites.Abbrev.to_list())]
@@ -253,4 +275,30 @@ print('Out-of-Sample validation results for ')
 print(report)
 
 
-'''Save model and scaler'''
+'''Show the classified validation images'''
+if ShowValidation:
+    for s in range(len(ValidationSites.index)):
+        ValidRasterName = DatFolder+ValidationSites.Abbrev[s]+'_'+str(ValidationSites.Month[s])+'_'+str(ValidationSites.Year[s])+'_S2.tif'
+        ValidRaster = io.imread(ValidRasterName)
+        ValidTensor = slide_raster_to_tiles(ValidRaster, size)
+        #get the central pixels in the tensor to transform this into pixel-based data for the non-convolutional NN
+        Middle =  ValidTensor.shape[1]//2
+        PixelData = np.squeeze( ValidTensor[:,Middle, Middle,:])
+        PixelDF = pd.DataFrame(data=PixelData, columns=['B1','B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12'])
+        ValidationFeatures = PixelDF[FeatureSet]
+        PredictedPixels = EstimatorNN.predict(ValidationFeatures)
+        PredictedClassImage = np.uint8(PredictedPixels.reshape(ValidRaster.shape[0]-size, ValidRaster.shape[1]-size))
+        PredictedClassImage[0,0]=1
+        PredictedClassImage[0,1]=2
+        PredictedClassImage[0,2]=3
+        PredictedClassImage[0,3]=4
+        cmapCHM = colors.ListedColormap(['black','red','green','blue'])
+        plt.figure()
+        plt.imshow(PredictedClassImage, cmap=cmapCHM)
+        class0_box = mpatches.Patch(color='black', label='Unclassified')
+        class1_box = mpatches.Patch(color='red', label='Sediment')
+        class2_box = mpatches.Patch(color='green', label='Veg.')
+        class3_box = mpatches.Patch(color='blue', label='Water')
+        ax=plt.gca()
+        ax.legend(handles=[class0_box, class1_box,class2_box,class3_box])
+        plt.title(ValidRasterName)
