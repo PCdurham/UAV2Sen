@@ -33,10 +33,10 @@ MainData = 'E:\\UAV2SEN\\MLdata\\CNNDebug'  #main data output from UAV2SEN_MakeC
 SiteList = 'E:\\UAV2SEN\\SiteList.csv'#this has the lists of sites with name, month, year and 1s and 0s to identify training and validation sites
 ModelName = 'E:\\UAV2SEN\\MLdata\\CNNdebugged.h5'  #Name and location of the final model to be saved
 TrainingEpochs = 15 #Typically this can be reduced
-Nfilters = 64
+Nfilters = 64 #powers of 2 only
 size=5#size of the tensor tiles
-KernelSize=3 # size of the convolution kernels
-UT=1.95# upper and lower thresholds to elimn=inate pure classes from fuzzy error estimates
+KernelSize=3 # size of the convolution kernels. Caution becasue mis-setting this could cause bugs in the network definition.  Best keep at 3.
+UT=1.95# upper and lower thresholds to elimninate pure classes from fuzzy error estimates if needed
 LT=-0.05
 
 
@@ -137,22 +137,44 @@ inShape = TrainingTensor.shape[1:]
 
 ##############################################################################
 """Instantiate the Neural Network pixel-based classifier""" 
-#EstimatorRF = RFC(n_estimators = 150, n_jobs = 8, verbose = Chatty) #adjust this to your processors
-   
-
-
 # define the very deep model with L2 regularization and dropout
 
  	# create model
-Estimator = Sequential()
-Estimator.add(Conv2D(Nfilters,KernelSize, data_format='channels_last', input_shape=inShape, activation=NAF))
-Estimator.add(Conv2D(Nfilters,KernelSize, activation=NAF))
-Estimator.add(Flatten())
-Estimator.add(Dense(64, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
-Estimator.add(BatchNormalization(axis=-1, momentum=0.99, epsilon=0.001, center=True, scale=True, beta_initializer='zeros', gamma_initializer='ones', moving_mean_initializer='zeros', moving_variance_initializer='ones', beta_regularizer=None, gamma_regularizer=None, beta_constraint=None, gamma_constraint=None))
-Estimator.add(Dense(32, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
-Estimator.add(Dense(16, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
-Estimator.add(Dense(NClasses, kernel_initializer='normal', activation='linear'))
+if size==3 
+    Estimator = Sequential()
+    Estimator.add(Conv2D(Nfilters,KernelSize, data_format='channels_last', input_shape=inShape, activation=NAF))
+    Estimator.add(Flatten())
+    Estimator.add(Dense(64, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
+    Estimator.add(BatchNormalization(axis=-1, momentum=0.99, epsilon=0.001, center=True, scale=True, beta_initializer='zeros', gamma_initializer='ones', moving_mean_initializer='zeros', moving_variance_initializer='ones', beta_regularizer=None, gamma_regularizer=None, beta_constraint=None, gamma_constraint=None))
+    Estimator.add(Dense(32, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
+    Estimator.add(Dense(16, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
+    Estimator.add(Dense(NClasses, kernel_initializer='normal', activation='linear'))    
+
+
+elif size==5:
+    Estimator = Sequential()
+    Estimator.add(Conv2D(Nfilters,KernelSize, data_format='channels_last', input_shape=inShape, activation=NAF))
+    Estimator.add(Conv2D(Nfilters/2,KernelSize, activation=NAF))
+    Estimator.add(Flatten())
+    Estimator.add(Dense(64, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
+    Estimator.add(BatchNormalization(axis=-1, momentum=0.99, epsilon=0.001, center=True, scale=True, beta_initializer='zeros', gamma_initializer='ones', moving_mean_initializer='zeros', moving_variance_initializer='ones', beta_regularizer=None, gamma_regularizer=None, beta_constraint=None, gamma_constraint=None))
+    Estimator.add(Dense(32, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
+    Estimator.add(Dense(16, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
+    Estimator.add(Dense(NClasses, kernel_initializer='normal', activation='linear'))
+    
+elif size==7:
+    Estimator = Sequential()
+    Estimator.add(Conv2D(Nfilters,KernelSize, data_format='channels_last', input_shape=inShape, activation=NAF))
+    Estimator.add(Conv2D(Nfilters/2,KernelSize, activation=NAF))
+    Estimator.add(Conv2D(Nfilters/4,KernelSize, activation=NAF))
+    Estimator.add(Flatten())
+    Estimator.add(Dense(64, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
+    Estimator.add(BatchNormalization(axis=-1, momentum=0.99, epsilon=0.001, center=True, scale=True, beta_initializer='zeros', gamma_initializer='ones', moving_mean_initializer='zeros', moving_variance_initializer='ones', beta_regularizer=None, gamma_regularizer=None, beta_constraint=None, gamma_constraint=None))
+    Estimator.add(Dense(32, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
+    Estimator.add(Dense(16, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
+    Estimator.add(Dense(NClasses, kernel_initializer='normal', activation='linear'))
+else:
+    raise Exception('Invalid tile size, only 3,5 and 7 available')
 
 #Tune an optimiser
 Optim = optimizers.Adam(lr=LearningRate, beta_1=0.9, beta_2=0.999, decay=0.0, amsgrad=True)
