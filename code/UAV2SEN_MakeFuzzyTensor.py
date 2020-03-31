@@ -30,7 +30,7 @@ SiteList = 'E:\\UAV2SEN\\SiteList.csv'#this has the lists of sites with name, mo
 DatFolder = 'E:\\UAV2SEN\\FinalTif\\' #location of above
 
 #tile size 
-size=5
+size=7
 
 
 #Output location
