@@ -36,7 +36,7 @@ MainData = 'E:\\UAV2SEN\\MLdata\\FullData_4xnoise'  #main data output from UAV2S
 SiteList = 'E:\\UAV2SEN\\SiteList.csv'#this has the lists of sites with name, month, year and 1s and 0s to identify training and validation sites
 DatFolder = 'E:\\UAV2SEN\\FinalTif\\'  #location of above
 TrainingEpochs = 5 #Typically this can be reduced
-Nfilters = 128
+Nfilters = 64
 UAVtrain = True #if true use the UAV class data to train the model, if false use desk-based
 UAVvalid = True #if true use the UAV class data to validate.  If false, use desk-based polygons
 size=5#size of the tensor tiles
@@ -273,7 +273,7 @@ if size==3:
     Estimator.add(BatchNormalization(axis=-1, momentum=0.99, epsilon=0.001, center=True, scale=True, beta_initializer='zeros', gamma_initializer='ones', moving_mean_initializer='zeros', moving_variance_initializer='ones', beta_regularizer=None, gamma_regularizer=None, beta_constraint=None, gamma_constraint=None))
     Estimator.add(Dense(32, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
     Estimator.add(Dense(16, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
-    Estimator.add(Dense(NClasses+1, kernel_initializer='normal', activation='linear'))    
+    Estimator.add(Dense(NClasses+1, kernel_initializer='normal', activation='softmax'))    
 
 
 elif size==5:
@@ -285,7 +285,7 @@ elif size==5:
     Estimator.add(BatchNormalization(axis=-1, momentum=0.99, epsilon=0.001, center=True, scale=True, beta_initializer='zeros', gamma_initializer='ones', moving_mean_initializer='zeros', moving_variance_initializer='ones', beta_regularizer=None, gamma_regularizer=None, beta_constraint=None, gamma_constraint=None))
     Estimator.add(Dense(32, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
     Estimator.add(Dense(16, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
-    Estimator.add(Dense(NClasses+1, kernel_initializer='normal', activation='linear'))
+    Estimator.add(Dense(NClasses+1, kernel_initializer='normal', activation='sortmax'))
     
 elif size==7:
     Estimator = Sequential()
@@ -297,7 +297,7 @@ elif size==7:
     Estimator.add(BatchNormalization(axis=-1, momentum=0.99, epsilon=0.001, center=True, scale=True, beta_initializer='zeros', gamma_initializer='ones', moving_mean_initializer='zeros', moving_variance_initializer='ones', beta_regularizer=None, gamma_regularizer=None, beta_constraint=None, gamma_constraint=None))
     Estimator.add(Dense(32, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
     Estimator.add(Dense(16, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
-    Estimator.add(Dense(NClasses+1, kernel_initializer='normal', activation='linear'))
+    Estimator.add(Dense(NClasses+1, kernel_initializer='normal', activation='softmax'))
 else:
     raise Exception('Invalid tile size, only 3,5 and 7 available')
 #Tune an optimiser
@@ -337,33 +337,55 @@ print(report)
 '''Show the classified validation images'''
 if ShowValidation:
     for s in range(len(ValidationSites.index)):
+        UAVRaster = io.imread(DatFolder+ValidationSites.Abbrev[s]+'_'+str(ValidationSites.Month[s])+'_'+str(ValidationSites.Year[s])+'_UAVCLS.tif')
+        UAVRaster[UAVRaster>3] =0
+        UAVRaster[UAVRaster<1] =0
+        UAVRasterRGB = np.zeros((UAVRaster.shape[0], UAVRaster.shape[1], 3))
+        UAVRasterRGB[:,:,0]=255*(UAVRaster==3)
+        UAVRasterRGB[:,:,1]=255*(UAVRaster==2)
+        UAVRasterRGB[:,:,2]=255*(UAVRaster==1)
+        
         ValidRasterName = DatFolder+ValidationSites.Abbrev[s]+'_'+str(ValidationSites.Month[s])+'_'+str(ValidationSites.Year[s])+'_S2.tif'
         ValidRaster = io.imread(ValidRasterName)
+        ValidRasterIR = np.zeros((ValidRaster.shape[0], ValidRaster.shape[1],3))
+        ValidRasterIR[:,:,0] = ValidRaster[:,:,10]
+        ValidRasterIR[:,:,1] = ValidRaster[:,:,4]
+        ValidRasterIR[:,:,2] = ValidRaster[:,:,3]
+        ValidRasterIR = ValidRasterIR/np.max(np.unique(ValidRasterIR))
         ValidTensor = slide_raster_to_tiles(ValidRaster, size)
-        print('bla')
         Valid=np.zeros(12)
         for n in range(1,13):
             if ('B'+str(n)) in FeatureSet:
                 Valid[n-1]=1
         
         ValidTensor = np.compress(Valid, ValidTensor, axis=3)
-        print(ValidTensor.shape)
+        #print(ValidTensor.shape)
         PredictedPixels = Estimator.predict(ValidTensor)
         PredictedPixels =np.argmax(PredictedPixels, axis=1)
-        PredictedClassImage = np.uint8(PredictedPixels.reshape(ValidRaster.shape[0]-size, ValidRaster.shape[1]-size))
-        PredictedClassImage[0,0]=1
-        PredictedClassImage[0,1]=2
-        PredictedClassImage[0,2]=3
-        PredictedClassImage[0,3]=0
-        cmapCHM = colors.ListedColormap(['black','red','green','blue'])
+        
+
+        PredictedPixels = np.int16(255*PredictedPixels.reshape(ValidRaster.shape[0]-size, ValidRaster.shape[1]-size))
+        PredictedClassImage=np.int16(np.zeros((PredictedPixels.shape[0], PredictedPixels.shape[1],3)))
+        PredictedClassImage[:,:,0]=255*(PredictedPixels==3)
+        PredictedClassImage[:,:,1]=255*(PredictedPixels==2)
+        PredictedClassImage[:,:,2]=255*(PredictedPixels==1)
+
+        cmapCHM = colors.ListedColormap(['black','red','lime','blue'])
         plt.figure()
-        plt.imshow(PredictedClassImage, cmap=cmapCHM)
-        class0_box = mpatches.Patch(color='black', label='Unclassified')
+        plt.subplot(2,2,1)
+        plt.imshow(np.int16(255*(ValidRasterIR)))
+        plt.title(ValidationSites.Abbrev[s]+'_'+str(ValidationSites.Month[s])+'_'+str(ValidationSites.Year[s]) + ' Bands (11,3,2)')
+        plt.subplot(2,2,2)
+        plt.imshow(PredictedClassImage)
+        plt.title(ValidationSites.Abbrev[s]+'_'+str(ValidationSites.Month[s])+'_'+str(ValidationSites.Year[s]) + ' Crisp Class')
         class1_box = mpatches.Patch(color='red', label='Sediment')
-        class2_box = mpatches.Patch(color='green', label='Veg.')
+        class2_box = mpatches.Patch(color='lime', label='Veg.')
         class3_box = mpatches.Patch(color='blue', label='Water')
         ax=plt.gca()
-        ax.legend(handles=[class0_box, class1_box,class2_box,class3_box])
-        plt.title(ValidRasterName)
-
-
+        ax.legend(handles=[class1_box,class2_box,class3_box], bbox_to_anchor=(1, -0.2),prop={'size': 30})
+        
+        #ax.legend(handles=[class1_box,class2_box,class3_box])
+        plt.subplot(2,2,3)
+        plt.imshow(np.int16(UAVRasterRGB))
+        plt.xlabel('UAV Ground-Truth Data')
+        
