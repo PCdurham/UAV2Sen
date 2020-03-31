@@ -50,12 +50,15 @@ DoHistory = False #Plot the history of the training losses
 
 '''Load the tensors and filter out the required training and validation data.'''
 TensorFileName = MainData+'_fuzzy_'+str(size)+'_T.npy'
-LabelFileName = MainData+'_fuzzy_'+str(size)+'_L.dat'
+LabelFileName = MainData+'_fuzzy_'+str(size)+'_L.csv'
+ValidationTensorFileName = MainData+'_crisp_'+str(size)+'_T.npy'
+ValidationLabelFileName= MainData+'_crisp_'+str(size)+'_L.csv'
 
 SiteDF = pd.read_csv(SiteList)
 MasterTensor = np.load(TensorFileName)
-MasterLabelDF=pd.read_feather(LabelFileName)
-
+MasterValidationTensor = np.load(ValidationTensorFileName)
+MasterLabelDF=pd.read_csv(LabelFileName)
+MasterValidationDF = pd.read_csv(ValidationLabelFileName)
 #Select the features in the tensor
 
 Valid=np.zeros(12)
@@ -64,6 +67,7 @@ for n in range(1,13):
         Valid[n-1]=1
         
 MasterTensor = np.compress(Valid, MasterTensor, axis=3)
+MasterValidationTensor = np.compress(Valid, MasterValidationTensor, axis=3)
 
 
 
@@ -73,11 +77,12 @@ TrainingSites = SiteDF[SiteDF.Training == 1]
 ValidationSites = SiteDF[SiteDF.Validation == 1]
 TrainingSites.index = range(0,len(TrainingSites.Year))
 ValidationSites.index = range(0,len(ValidationSites.Year))
+
 #initialise the training and validation DFs to the master
 TrainingDF = MasterLabelDF
 TrainingTensor = MasterTensor
-ValidationDF = MasterLabelDF
-ValidationTensor = MasterTensor
+ValidationDF = MasterValidationDF
+ValidationTensor = MasterValidationTensor
 
 #isolate the sites, months and year and isolate the associated tensor values
 MasterValid = (np.zeros(len(MasterLabelDF.index)))==1
@@ -88,7 +93,7 @@ for s in range(len(TrainingSites.Site)):
 TrainingDF = TrainingDF.loc[MasterValid]
 TrainingTensor=np.compress(MasterValid,TrainingTensor, axis=0)
 
-MasterValid = (np.zeros(len(MasterLabelDF.index)))
+MasterValid = (np.zeros(len(MasterValidationDF.index)))
 for s in range(len(ValidationSites.Site)):
     Valid = (ValidationDF.Site == ValidationSites.Abbrev[s])&(ValidationDF.Year==ValidationSites.Year[s])&(ValidationDF.Month==ValidationSites.Month[s])
     MasterValid = MasterValid | Valid
@@ -142,7 +147,7 @@ inShape = TrainingTensor.shape[1:]
 # define the model with L2 regularization and dropout
 
  	# create model
-if size==3 
+if size==3: 
     Estimator = Sequential()
     Estimator.add(Conv2D(Nfilters,KernelSize, data_format='channels_last', input_shape=inShape, activation=NAF))
     Estimator.add(Flatten())
