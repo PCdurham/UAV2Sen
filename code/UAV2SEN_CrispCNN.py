@@ -35,13 +35,13 @@ import matplotlib.patches as mpatches
 MainData = 'E:\\UAV2SEN\\MLdata\\FullData_4xnoise'  #main data output from UAV2SEN_MakeCrispTensor.py. no extensions, will be fleshed out below
 SiteList = 'E:\\UAV2SEN\\SiteList.csv'#this has the lists of sites with name, month, year and 1s and 0s to identify training and validation sites
 DatFolder = 'E:\\UAV2SEN\\FinalTif\\'  #location of above
-TrainingEpochs = 5 #Typically this can be reduced
+TrainingEpochs = 100 #Typically this can be reduced
 Nfilters = 64
 UAVtrain = True #if true use the UAV class data to train the model, if false use desk-based
 UAVvalid = True #if true use the UAV class data to validate.  If false, use desk-based polygons
 size=5#size of the tensor tiles
 KernelSize=3 # size of the convolution kernels
-MajType= 'Pure' #Majority type. only used if UAVtrain or valid is true. The options are RelMaj (relative majority), Maj (majority) and Pure (95% unanimous).
+MajType= 'Maj' #Majority type. only used if UAVtrain or valid is true. The options are RelMaj (relative majority), Maj (majority) and Pure (95% unanimous).
 ShowValidation = True #if true will show predicted class rasters for validation images from the site list
 FeatureSet = ['B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12'] # pick predictor bands from: ['B1','B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12']
 
@@ -111,7 +111,7 @@ for s in range(len(TrainingSites.Site)):
 TrainingDF = TrainingDF.loc[MasterValid]
 TrainingTensor=np.compress(MasterValid,TrainingTensor, axis=0)#will delete where valid is false
 
-MasterValid = (np.zeros(len(MasterLabelDF.index)))
+MasterValid = (np.zeros(len(MasterLabelDF.index)))==1
 for s in range(len(ValidationSites.Site)):
     Valid = (ValidationDF.Site == ValidationSites.Abbrev[s])&(ValidationDF.Year==ValidationSites.Year[s])&(ValidationDF.Month==ValidationSites.Month[s])
     MasterValid = MasterValid | Valid
@@ -208,7 +208,7 @@ elif ~(UAVtrain) & UAVvalid:
     elif 'Pure' in MajType:
         ValidationDF = ValidationDF[ValidationDF.PureClass>0]
         ValidationLabels = ValidationDF.PureClass
-        Valid = ValidationDF.ValidationDF.PureClass>0
+        Valid = ValidationDF.PureClass>0
         ValidationTensor = np.compress(Valid, ValidationTensor, axis=0)
     
 else:
@@ -285,7 +285,7 @@ elif size==5:
     Estimator.add(BatchNormalization(axis=-1, momentum=0.99, epsilon=0.001, center=True, scale=True, beta_initializer='zeros', gamma_initializer='ones', moving_mean_initializer='zeros', moving_variance_initializer='ones', beta_regularizer=None, gamma_regularizer=None, beta_constraint=None, gamma_constraint=None))
     Estimator.add(Dense(32, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
     Estimator.add(Dense(16, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
-    Estimator.add(Dense(NClasses+1, kernel_initializer='normal', activation='sortmax'))
+    Estimator.add(Dense(NClasses+1, kernel_initializer='normal', activation='softmax'))
     
 elif size==7:
     Estimator = Sequential()
@@ -364,7 +364,7 @@ if ShowValidation:
         PredictedPixels =np.argmax(PredictedPixels, axis=1)
         
 
-        PredictedPixels = np.int16(255*PredictedPixels.reshape(ValidRaster.shape[0]-size, ValidRaster.shape[1]-size))
+        PredictedPixels = np.int16(PredictedPixels.reshape(ValidRaster.shape[0]-size, ValidRaster.shape[1]-size))
         PredictedClassImage=np.int16(np.zeros((PredictedPixels.shape[0], PredictedPixels.shape[1],3)))
         PredictedClassImage[:,:,0]=255*(PredictedPixels==3)
         PredictedClassImage[:,:,1]=255*(PredictedPixels==2)
