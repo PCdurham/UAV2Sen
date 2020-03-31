@@ -37,7 +37,7 @@ MainData = 'E:\\UAV2SEN\\MLdata\\FullData_4xnoise'  #main data output from UAV2S
 SiteList = 'E:\\UAV2SEN\\SiteList.csv'#this has the lists of sites with name, month, year and 1s and 0s to identify training and validation sites
 ModelName = 'E:\\UAV2SEN\\MLdata\\CNNdebugged.h5'  #Name and location of the final model to be saved
 DatFolder = 'E:\\UAV2SEN\\FinalTif\\'  #location of processed tif files
-TrainingEpochs = 100 #Typically this can be reduced
+TrainingEpochs = 50 #Typically this can be reduced
 Nfilters = 64 #powers of 2 only
 size=5#size of the tensor tiles
 KernelSize=3 # size of the convolution kernels. Caution becasue mis-setting this could cause bugs in the network definition.  Best keep at 3.
@@ -45,9 +45,9 @@ UT=1.95# upper and lower thresholds to elimninate pure classes from fuzzy error 
 LT=-0.05
 ShowValidation = True#if true fuzzy classified images of the validation sites will be displayed
 
-FeatureSet =  ['B1','B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12'] # pick predictor bands from: ['B1','B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12']
+FeatureSet =  ['B2','B3','B4','B5','B6','B7','B8','B9','B11','B12'] # pick predictor bands from: ['B1','B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12']
 LabelSet = ['WaterMem', 'VegMem','SedMem' ]
-LearningRate = 0.001
+LearningRate = 0.0001
 Chatty = 1 # set the verbosity of the model training. 
 NAF = 'relu' #NN activation function
 
@@ -182,7 +182,7 @@ if size==3:
 elif size==5:
     Estimator = Sequential()
     Estimator.add(Conv2D(Nfilters,KernelSize, data_format='channels_last', input_shape=inShape, activation=NAF))
-    Estimator.add(Conv2D(Nfilters//2,KernelSize, activation=NAF))
+    Estimator.add(Conv2D(Nfilters,KernelSize, activation=NAF))
     Estimator.add(Flatten())
     Estimator.add(Dense(64, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
     Estimator.add(BatchNormalization(axis=-1, momentum=0.99, epsilon=0.001, center=True, scale=True, beta_initializer='zeros', gamma_initializer='ones', moving_mean_initializer='zeros', moving_variance_initializer='ones', beta_regularizer=None, gamma_regularizer=None, beta_constraint=None, gamma_constraint=None))
