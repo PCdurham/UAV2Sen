@@ -35,13 +35,13 @@ import matplotlib.patches as mpatches
 MainData = 'E:\\UAV2SEN\\MLdata\\FullData_4xnoise'  #main data output from UAV2SEN_MakeCrispTensor.py. no extensions, will be fleshed out below
 SiteList = 'E:\\UAV2SEN\\SiteList.csv'#this has the lists of sites with name, month, year and 1s and 0s to identify training and validation sites
 DatFolder = 'E:\\UAV2SEN\\FinalTif\\'  #location of above
-TrainingEpochs = 100 #Typically this can be reduced
+TrainingEpochs = 15 #Typically this can be reduced
 Nfilters = 64
 UAVtrain = True #if true use the UAV class data to train the model, if false use desk-based
 UAVvalid = True #if true use the UAV class data to validate.  If false, use desk-based polygons
 size=5#size of the tensor tiles
 KernelSize=3 # size of the convolution kernels
-MajType= 'Maj' #Majority type. only used if UAVtrain or valid is true. The options are RelMaj (relative majority), Maj (majority) and Pure (95% unanimous).
+MajType= 'Pure' #Majority type. only used if UAVtrain or valid is true. The options are RelMaj (relative majority class), Maj (majority) and Pure (95% unanimous).
 ShowValidation = True #if true will show predicted class rasters for validation images from the site list
 FeatureSet = ['B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12'] # pick predictor bands from: ['B1','B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12']
 
@@ -120,107 +120,45 @@ ValidationDF = ValidationDF.loc[MasterValid]
 ValidationTensor = np.compress(MasterValid,ValidationTensor, axis=0)#will delete where valid is false 
 
     
-
+MajType=MajType+'Class'
 
 
 #select desk-based or UAV-based for training and validation, if using UAV data, select the majority type
 if UAVtrain & UAVvalid:
-    TrainingDF=TrainingDF[TrainingDF.PolyClass==-1]
-    ValidationDF=ValidationDF[ValidationDF.PolyClass==-1]
-    Valid= TrainingDF.PolyClass==-1
-    TrainingTensor = np.compress(Valid, TrainingTensor, axis=0)
-    Valid = ValidationDF.PolyClass==-1
-    ValidationTensor = np.compress(Valid, ValidationTensor, axis=0)
-    if 'RelMaj' in  MajType:
-        TrainingDF = TrainingDF[TrainingDF.RelMajClass>0]
-        ValidationDF = ValidationDF[ValidationDF.RelMajClass>0]
-        TrainLabels = TrainingDF.RelMajClass
-        ValidationLabels = ValidationDF.RelMajClass
-        Valid= TrainingDF.RelMajClass>0
-        TrainingTensor = np.compress(Valid, TrainingTensor, axis=0)
-        Valid = ValidationDF.RelMajClass>0
-        ValidationTensor = np.compress(Valid, ValidationTensor, axis=0)
-    elif 'Maj' in MajType:
-        TrainingDF = TrainingDF[TrainingDF.MajClass>0]
-        ValidationDF = ValidationDF[ValidationDF.MajClass>0]
-        TrainLabels = TrainingDF.MajClass
-        ValidationLabels = ValidationDF.MajClass
-        Valid= TrainingDF.MajClass>0
-        TrainingTensor = np.compress(Valid, TrainingTensor, axis=0)
-        Valid = ValidationDF.MajClass>0
-        ValidationTensor = np.compress(Valid, ValidationTensor, axis=0)
+    TrainLabels= TrainingDF[MajType]
+    ValidationLabels = ValidationDF[MajType]
+    TrainingTensor = np.compress(TrainLabels>0, TrainingTensor, axis=0)
+    ValidationTensor = np.compress(ValidationLabels>0,ValidationTensor, axis=0)
+    TrainLabels=TrainLabels.loc[TrainLabels>0]
+    ValidationLabels=ValidationLabels.loc[ValidationLabels>0]
     
-    elif 'Pure' in MajType:
-        TrainingDF = TrainingDF[TrainingDF.PureClass>0]
-        ValidationDF = ValidationDF[ValidationDF.PureClass>0]
-        TrainLabels = TrainingDF.PureClass
-        ValidationLabels = ValidationDF.PureClass
-        Valid= TrainingDF.PureClass>0
-        TrainingTensor = np.compress(Valid, TrainingTensor, axis=0)
-        Valid = ValidationDF.PureClass>0
-        ValidationTensor = np.compress(Valid, ValidationTensor, axis=0)
-        
+   
 elif UAVtrain and ~(UAVvalid):
-    TrainingDF=TrainingDF[TrainingDF.PolyClass==-1]
-    ValidationDF=ValidationDF[ValidationDF.PolyClass>0]
+    TrainLabels= TrainingDF[MajType]
     ValidationLabels = ValidationDF.PolyClass
-    Valid= TrainingDF.PolyClass==-1
-    TrainingTensor = np.compress(Valid, TrainingTensor, axis=0)
-    Valid = ValidationDF.PolyClass>0
-    ValidationTensor = np.compress(Valid, ValidationTensor, axis=0)
-    if 'RelMaj' in  MajType:
-        TrainingDF = TrainingDF[TrainingDF.RelMajClass>0]
-        TrainLabels = TrainingDF.RelMajClass
-        Valid= TrainingDF.RelMajClass>0
-        TrainingTensor = np.compress(Valid, TrainingTensor, axis=0)
-
-    elif 'Maj' in MajType:
-        TrainingDF = TrainingDF[TrainingDF.MajClass>0]
-        TrainLabels = TrainingDF.MajClass
-        Valid= TrainingDF.MajClass>0
-        TrainingTensor = np.compress(Valid, TrainingTensor, axis=0)
+    TrainingTensor = np.compress(TrainLabels>0, TrainingTensor, axis=0)
+    ValidationTensor = np.compress(ValidationLabels>0,ValidationTensor, axis=0)
+    TrainLabels=TrainLabels.loc[TrainLabels>0]
+    ValidationLabels=ValidationLabels.loc[ValidationLabels>0]
     
-    elif 'Pure' in MajType:
-        TrainingDF = TrainingDF[TrainingDF.PureClass>0]
-        TrainLabels = TrainingDF.PureClass
-        Valid= TrainingDF.PureClass>0
-        TrainingTensor = np.compress(Valid, TrainingTensor, axis=0)
-        
 elif ~(UAVtrain) & UAVvalid:
-    TrainingDF=TrainingDF[TrainingDF.PolyClass>0]
-    TrainLabels = TrainingDF.PolyClass
-    ValidationDF=ValidationDF[ValidationDF.PolyClass==-1]
-    Valid= TrainingDF.PolyClass>0
-    TrainingTensor = np.compress(Valid, TrainingTensor, axis=0)
-    Valid = ValidationDF.PolyClass==-1
-    ValidationTensor = np.compress(Valid, ValidationTensor, axis=0)
-    if 'RelMaj' in  MajType:
-        ValidationDF = ValidationDF[ValidationDF.RelMajClass>0]
-        ValidationLabels = ValidationDF.RelMajClass
-        Valid = ValidationDF.RelMajClass>0
-        ValidationTensor = np.compress(Valid, ValidationTensor, axis=0)
-    elif 'Maj' in MajType:
-        ValidationDF = ValidationDF[ValidationDF.MajClass>0]
-        ValidationLabels = ValidationDF.MajClass
-        Valid = ValidationDF.MajClass>0
-        ValidationTensor = np.compress(Valid, ValidationTensor, axis=0)
+    TrainLabels= TrainingDF.PolyClass
+    ValidationLabels = ValidationDF[MajType]
+    TrainingTensor = np.compress(TrainLabels>0, TrainingTensor, axis=0)
+    ValidationTensor = np.compress(ValidationLabels>0,ValidationTensor, axis=0)
+    TrainLabels=TrainLabels.loc[TrainLabels>0]
+    ValidationLabels=ValidationLabels.loc[ValidationLabels>0]
     
-    elif 'Pure' in MajType:
-        ValidationDF = ValidationDF[ValidationDF.PureClass>0]
-        ValidationLabels = ValidationDF.PureClass
-        Valid = ValidationDF.PureClass>0
-        ValidationTensor = np.compress(Valid, ValidationTensor, axis=0)
-    
+#
 else:
-    TrainingDF=TrainingDF[TrainingDF.PolyClass>0]
-    ValidationDF=ValidationDF[ValidationDF.PolyClass>0]
-    TrainLabels = TrainingDF.PolyClass
-    ValidationDF=ValidationDF[ValidationDF.PolyClass>0]
+    TrainLabels= TrainingDF.PolyClass
     ValidationLabels = ValidationDF.PolyClass
-    Valid= TrainingDF.PolyClass>0
-    TrainingTensor = np.compress(Valid, TrainingTensor, axis=0)
-    Valid = ValidationDF.PolyClass>0
-    ValidationTensor = np.compress(Valid, ValidationTensor, axis=0)
+    TrainingTensor = np.compress(TrainLabels>0, TrainingTensor, axis=0)
+    ValidationTensor = np.compress(ValidationLabels>0,ValidationTensor, axis=0)
+    TrainLabels=TrainLabels.loc[TrainLabels>0]
+    ValidationLabels=ValidationLabels.loc[ValidationLabels>0]
+    
+#   
     
 #check for empty dataframes and raise an error if found
 
