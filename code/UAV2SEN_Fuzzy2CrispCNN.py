@@ -26,20 +26,22 @@ import statsmodels.api as sm
 
 
 
+
 #############################################################
 """User data input. Use the site template and list training and validation choices"""
 #############################################################
-MainData = 'E:\\UAV2SEN\\MLdata\\CNNDebug'  #main data output from UAV2SEN_MakeCrispTensor.py. no extensions, will be fleshed out below
+#############################################################
+MainData = 'E:\\UAV2SEN\\MLdata\\FullData_4xnoise'  #main data output from UAV2SEN_MakeCrispTensor.py. no extensions, will be fleshed out below
 SiteList = 'E:\\UAV2SEN\\SiteList.csv'#this has the lists of sites with name, month, year and 1s and 0s to identify training and validation sites
 ModelName = 'E:\\UAV2SEN\\MLdata\\CNNdebugged.h5'  #Name and location of the final model to be saved
+DatFolder = 'E:\\UAV2SEN\\FinalTif\\'  #location of processed tif files
 TrainingEpochs = 15 #Typically this can be reduced
 Nfilters = 64
 size=5#size of the tensor tiles
-KernelSize=3 # size of the convolution kernels
-UT=1.95# upper and lower thresholds to elimn=inate pure classes from fuzzy error estimates
-LT=-0.05
-MajType = 'RelMaj' #majority type to use in crisp validation
+KernelSize=3 # size of the convolution kernels. 
 
+UAVvalid = False #if true use the UAV class data to validate.  If false, use desk-based polygons and ignore majority type
+MajType = 'Pure' #majority type to use in crisp validation
 FeatureSet =  ['B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12'] # pick predictor bands from: ['B1','B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12']
 LabelSet = ['WaterMem', 'VegMem','SedMem' ]
 LearningRate = 0.001
@@ -47,6 +49,29 @@ Chatty = 1 # set the verbosity of the model training.
 NAF = 'relu' #NN activation function
 
 DoHistory = False #Plot the history of the training losses
+ShowValidation=True
+
+#################################################################################
+'''Function definitions'''
+def slide_raster_to_tiles(im, size):
+    h=im.shape[0]
+    w=im.shape[1]
+    di=im.shape[2]
+    TileTensor = np.zeros(((h-size)*(w-size), size,size,di))
+
+    
+    B=0
+    for y in range(0, h-size):
+        for x in range(0, w-size):
+
+            TileTensor[B,:,:,:] = im[y:y+size,x:x+size,:]
+            B+=1
+
+    return TileTensor
+
+
+####################################################################################
+    
 
 '''Load the tensors and filter out the required training and validation data.'''
 TensorFileName = MainData+'_fuzzy_'+str(size)+'_T.npy'
@@ -95,7 +120,7 @@ TrainingTensor=np.compress(MasterValid,TrainingTensor, axis=0)
 
 MasterValid = (np.zeros(len(MasterValidationDF.index)))
 for s in range(len(ValidationSites.Site)):
-    Valid = (ValidationDF.Site == ValidationSites.Abbrev[s])&(ValidationDF.Year==ValidationSites.Year[s])&(ValidationDF.Month==ValidationSites.Month[s])
+    Valid = (MasterValidationDF.Site == ValidationSites.Abbrev[s])&(MasterValidationDF.Year==ValidationSites.Year[s])&(MasterValidationDF.Month==ValidationSites.Month[s])
     MasterValid = MasterValid | Valid
     
 ValidationDF = ValidationDF.loc[MasterValid]
@@ -104,8 +129,25 @@ ValidationTensor = np.compress(MasterValid,ValidationTensor, axis=0)
 
 #Set the labels
 TrainingLabels = TrainingDF[LabelSet]
-ValidationLabels = ValidationDF[LabelSet]
-    
+MajType=MajType+'Class'
+
+
+
+
+#select desk-based or UAV-based for training and validation, if using UAV data, select the majority type
+if UAVvalid:
+
+    ValidationLabels = ValidationDF[MajType]
+    ValidationTensor = np.compress(ValidationLabels>0,ValidationTensor, axis=0)
+    ValidationLabels=ValidationLabels.loc[ValidationLabels>0]
+  
+
+#
+else:
+
+    ValidationLabels = ValidationDF.PolyClass
+    ValidationTensor = np.compress(ValidationLabels>0,ValidationTensor, axis=0)
+    ValidationLabels=ValidationLabels.loc[ValidationLabels>0]    
 #check for empty dataframes and raise an error if found
 
 if (len(TrainingDF.index)==0):
@@ -161,7 +203,7 @@ if size==3:
 elif size==5:
     Estimator = Sequential()
     Estimator.add(Conv2D(Nfilters,KernelSize, data_format='channels_last', input_shape=inShape, activation=NAF))
-    Estimator.add(Conv2D(Nfilters/2,KernelSize, activation=NAF))
+    Estimator.add(Conv2D(Nfilters//2,KernelSize, activation=NAF))
     Estimator.add(Flatten())
     Estimator.add(Dense(64, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
     Estimator.add(BatchNormalization(axis=-1, momentum=0.99, epsilon=0.001, center=True, scale=True, beta_initializer='zeros', gamma_initializer='ones', moving_mean_initializer='zeros', moving_variance_initializer='ones', beta_regularizer=None, gamma_regularizer=None, beta_constraint=None, gamma_constraint=None))
@@ -172,8 +214,8 @@ elif size==5:
 elif size==7:
     Estimator = Sequential()
     Estimator.add(Conv2D(Nfilters,KernelSize, data_format='channels_last', input_shape=inShape, activation=NAF))
-    Estimator.add(Conv2D(Nfilters/2,KernelSize, activation=NAF))
-    Estimator.add(Conv2D(Nfilters/4,KernelSize, activation=NAF))
+    Estimator.add(Conv2D(Nfilters//2,KernelSize, activation=NAF))
+    Estimator.add(Conv2D(Nfilters//4,KernelSize, activation=NAF))
     Estimator.add(Flatten())
     Estimator.add(Dense(64, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
     Estimator.add(BatchNormalization(axis=-1, momentum=0.99, epsilon=0.001, center=True, scale=True, beta_initializer='zeros', gamma_initializer='ones', moving_mean_initializer='zeros', moving_variance_initializer='ones', beta_regularizer=None, gamma_regularizer=None, beta_constraint=None, gamma_constraint=None))
@@ -194,74 +236,39 @@ Estimator.summary()
 ###############################################################################
 """Data Fitting"""
 
-X_train, X_test, y_train, y_test = train_test_split(TrainingTensor, TrainingLabels, test_size=0.2, random_state=42)
+X_train, X_test, y_train, y_test = train_test_split(TrainingTensor, TrainingLabels, test_size=0.0001, random_state=42)
 print('Fitting CNN Classifier on ' + str(len(X_train)) + ' pixels')
 Estimator.fit(X_train, y_train, batch_size=1000, epochs=TrainingEpochs, verbose=Chatty)#, class_weight=weights)
 
 '''Validate the model by crisping up the test and validation data and predicting classes instead of memberships'''
-#Test data
-PredictedPixels = Estimator.predict(X_test)
-Y=y_test
 
-##See if the dominant class is predicted correctly with F1
-ClassPredicted = 1+np.argmax(PredictedPixels, axis=1)
-ClassTrue = 1+np.argmax(Y,axis=1)
-
-report = metrics.classification_report(ClassTrue, ClassPredicted, digits = 3)
-print('TESTING results for relative majority ')
-print(report)
-print('\n \n')
-
-ClassPredicted = 1+np.argmax(PredictedPixels, axis=1)
-ClassPredicted = ClassPredicted[np.max(Y, axis=1)>0.50]
-Z = Y[np.max(Y, axis=1)>0.5]
-ClassTrue = 1+np.argmax(Z,axis=1)
-report = metrics.classification_report(ClassTrue, ClassPredicted, digits = 3)
-print('TESTING results for majority ')
-print(report)
-print('\n \n')
-
-ClassPredicted = 1+np.argmax(PredictedPixels, axis=1)
-ClassPredicted = ClassPredicted[np.max(Y, axis=1)>0.95]
-Z = Y[np.max(Y, axis=1)>0.95]
-ClassTrue = 1+np.argmax(Z,axis=1)
-report = metrics.classification_report(ClassTrue, ClassPredicted, digits = 3)
-print('TESTING results for pure class  ')
-print(report)
-print('\n \n')
-
-    
-    
-
-
-
-#Validation data
 PredictedPixels = Estimator.predict(ValidationTensor)
 Y=ValidationLabels
 
 ##See if the dominant class is predicted correctly with F1
 ClassPredicted = 1+np.argmax(PredictedPixels, axis=1)
-ClassTrue = 1+np.argmax(Y,axis=1)
+ClassTrue = Y
 
 report = metrics.classification_report(ClassTrue, ClassPredicted, digits = 3)
-print('VALIDATION results for relative majority ')
+print('CRISP Validation results for relative majority ')
 print(report)
 print('\n \n')
 
 ClassPredicted = 1+np.argmax(PredictedPixels, axis=1)
-ClassPredicted = ClassPredicted[np.max(Y, axis=1)>0.50]
-Z = Y[np.max(Y, axis=1)>0.75]
-ClassTrue = 1+np.argmax(Z,axis=1)
-report = metrics.classification_report(ClassTrue, ClassPredicted, digits = 3)
-print('VALIDATION results for majority ')
+ClassPredicted_maj = ClassPredicted[np.max(PredictedPixels, axis=1)>0.50]
+ClassTrue = Y[np.max(PredictedPixels, axis=1)>0.50]
+report = metrics.classification_report(ClassTrue, ClassPredicted_maj, digits = 3)
+print('CRISP Validation results for majority ')
 print(report)
 print('\n \n')
 
 ClassPredicted = 1+np.argmax(PredictedPixels, axis=1)
-ClassPredicted = ClassPredicted[np.max(Y, axis=1)>0.95]
-Z = Y[np.max(Y, axis=1)>0.95]
-ClassTrue = 1+np.argmax(Z,axis=1)
-report = metrics.classification_report(ClassTrue, ClassPredicted, digits = 3)
-print('VALIDATION results for pure class  ')
+ClassPredicted_pure = ClassPredicted[np.max(PredictedPixels, axis=1)>0.950]
+ClassTrue = Y[np.max(PredictedPixels, axis=1)>0.950]
+report = metrics.classification_report(ClassTrue, ClassPredicted_pure, digits = 3)
+print('CRISP Validation results for pure class  ')
 print(report)
 print('\n \n')
+
+
+
