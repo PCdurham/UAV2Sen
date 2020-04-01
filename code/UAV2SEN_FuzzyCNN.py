@@ -50,7 +50,7 @@ FeatureSet =  ['B2','B3','B4','B5','B6','B7','B8','B9','B11','B12'] # pick predi
 LabelSet = ['WaterMem', 'VegMem','SedMem' ]
 
 '''CNN parameters'''
-TrainingEpochs = 50 #Typically this can be reduced
+TrainingEpochs = 50 #Use model tuning to adjust this and prevent overfitting
 Nfilters = 64 
 size=5#size of the tensor tiles
 KernelSize=3 # size of the convolution kernels. Caution becasue mis-setting this could cause bugs in the network definition.  Best keep at 3.
@@ -230,6 +230,8 @@ Estimator.summary()
 """Data Splitting"""
 
 X_train, X_test, y_train, y_test = train_test_split(TrainingTensor, TrainingLabels, test_size=0.2, random_state=42)
+
+
 if ModelTuning:
     #Split the data for tuning. Use a double pass of train_test_split to shave off some data
    
@@ -270,8 +272,8 @@ if ModelTuning:
 
 '''Model Fitting'''
 print('Fitting CNN Classifier on ' + str(len(X_train)) + ' pixels')
-Estimator.fit(X_train, y_train, batch_size=1000, epochs=TrainingEpochs, verbose=Chatty)#, class_weight=weights)
-#EstimatorRF.fit(X_train, y_train)
+Estimator.fit(X_train, y_train, batch_size=1000, epochs=TrainingEpochs, verbose=Chatty)
+
     
 
 
@@ -452,7 +454,7 @@ if ShowValidation:
         class2_box = mpatches.Patch(color='lime', label='Veg.')
         class3_box = mpatches.Patch(color='blue', label='Water')
         ax=plt.gca()
-        ax.legend(handles=[class1_box,class2_box,class3_box], bbox_to_anchor=(1, -0.2),prop={'size': 30})
+        ax.legend(handles=[class1_box,class2_box,class3_box], bbox_to_anchor=(1, -0.2),prop={'size': 20})
         
         #ax.legend(handles=[class1_box,class2_box,class3_box])
         plt.subplot(2,2,3)
