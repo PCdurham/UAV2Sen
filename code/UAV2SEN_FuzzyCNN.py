@@ -63,7 +63,7 @@ ModelTuning = False #Plot the history of the training losses.  Increase the Trai
 '''Validation Settings'''
 UT=0.95# upper and lower thresholds to elimninate pure classes from fuzzy error Pred vs Obs displays
 LT=0.05
-ShowValidation = True#if true fuzzy classified images of the validation sites will be displayed
+ShowValidation = False#if true fuzzy classified images of the validation sites will be displayed
 
 
 
