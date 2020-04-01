@@ -6,6 +6,14 @@ __contact__ = 'patrice.carbonneau@durham.ac.uk'
 __copyright__ = '(c) Patrice Carbonneau'
 __license__ = 'MIT'
 
+'''
+
+This script performs fuzzy classification of river corridor features with a CNN.  the script allows 
+the user to tune, train, validate and save CNN models.  The required inputs must be produced with the
+UAV2SEN_MakeFuzzyTensor.py script.
+
+'''
+
 ###############################################################################
 """ Libraries"""
 from tensorflow.keras import regularizers
