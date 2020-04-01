@@ -21,13 +21,25 @@ We recommend using the Anaconda distribution of Python 3 which installs all the 
 The algorithms work best with Sentinel 2 data where all bands have been super-resolved to 10m.  We used the super-resolution plugin for ESA SNAP. [Super-Resolution for SNAP](https://nicolas.brodu.net/recherche/superres/)
 
 *GIS preparation*
-Once the Sentinel 2 images have been super-resolved, they should be cropped to an area matching the UAV survey areas that wil be used to train the fuzzy classification.  We assume the use of 3 classes for water, sediment and vegetation. It also requires class rasters created manually (rasterised polygons) which define areas of the classes above. The process will therefore expect 3 files for each site: A cropped Sentinel 2 file ending in _S2.tif
+Once the Sentinel 2 images have been super-resolved, they should be cropped to an area matching the UAV survey areas that wil be used to train the fuzzy classification.  We assume the use of 3 classes for water, sediment and vegetation. It also requires class rasters created manually (rasterised polygons) which define areas of the classes above. The process will therefore expect 3 files for each site: A cropped Sentinel 2 file ending in _S2.tif; a classified orthomosaic ending with _UAVCLS.tif and a rasterised polygon file ending in _dbPoly.tif. 
 
-### Model Training
-UAV2SEN_FuzzyDNN, UAV2SEN_FuzzyRF, UAV2SEN_FuzzyCNN will train the appropriate model with the sample data.  Note that the model will not be saved so must be ketp in memory for the next steps.  
+This data is controlled with a small csv file with fields: 'Site Name', 'Abbrev', 'Month', 'Year', 'Training', 'Validation'. The training and vlaidation fields are filled with 0s or 1s and later used to select sites for training of validation. The script UAV2SEN_CheckFiles.py can be used to check that all the listed sites have the expected files in the folder.
 
-### Model Validation
-UAV2SEN.FuzzyValidation will validate any of the trained predictors against grount truth data also included in the sample dataset.  
+### Step 1: Data Compilation
+Before modelling the data must be organised into a set of tensors and associated dataframe with the classification labels and associated site details.  This process is controlled with the csv file.  First, run UAV2SEN_MakeCrispTensor.py.  This will run through all the listed sites, ignoring the 'Training' and 'Validation' fields.   Label will be compiled by converting the UAV classes into crisp classes and by using the polygon interpretations.  All the super-resolved sentinel 2 cropped images will be tiled and associated label data compiled.  The tensors will be saved as a large numpy array and the labels as a csv.  Second, run UAV2SEN_MakeFuzzyTensor.py.  This process is similar except that the label data will consist of fuzzy membership percentages for each pixel.
 
-### Map Production
-UAV2SEN_FuzzyCNN_QGIS is coded to run in the Python console of QGIS.  Scripts were tested under QGIS 3.4 long term release. Keras, Tensorflow and Scikit-Image must also be installed in the python 3 environment of QGIS.  This script will train the CNN model and calculate a fuzzy classification for a user-specified image.  The result will be 3 seperate raster outputs containing the membership % for classes of water, vegetation and dry sediment.
+For each script, the user must carefully read and edit the 'User Inputs' section at the start of the script.
+
+### Step 1: Modelling
+Once data have been compiled, modelling can begin.  The modelling process is controlled with the csv site list file.  To use a site for model training, add a 1 in the training column.  To use a site for model validation, add a 1 in the validation column.  For each model run, a minimum of 1 training site and minimum of 1 validation site are required.  It is not recommended to use a site for both training and validation, but this will not cause an exception.
+
+UAV2SEN_CrispCNN will use crisp data and run a crisp classifier algorithm.  The routine has a model tuning option that allows the user to adjust training epochs and avoid overfitting. The validation data will be used to produce F1 scores for the validation predictions.  There is also an option to display the mapped output of the validation site predictions.  The trained model will be saved to disk.
+
+UAV2SEN_FuzzyCNN will use the fuzzy membership data.  The routine has similar model tuning options.  The validation data will be used to examine mean and rms values of fuzzy prediction as well as the slope of predicted vs observed fuzzy predictions. There is also an option to display the mapped output of the validation site predictions. The trained model will be saved to disk.
+
+UAV2SEN_Fuzzy2Crisp will train a fuzzy model but will use this model to predict crisp classes. Validation will be done with F1 scores and here the user can adjust the threshold of what constitutes a pure class. There is also an option to display the mapped output of the validation site predictions. The trained model will NOT be saved to disk. Use the fuzzyCNN script above for to produce saved models.
+
+### Step 2: Large Scale Deployment
+For map production, UAV2SEN_fuzzyCNN_BigTif.py can take a large geocoded image and run a pre-trained CNN model.  The outputs will be 3 geocoded rasters for vegetation membership, water membership and sediment membership.  These will open and overlay directly in a GIS program for furtherprocessing.  The rasters are coded from 0 to 100 thus directly giving the membership % for the given class of a given pixel.  EG, if a pixel of the water membership raster has a value of 56, the pixel is predicted to have 56% water.
+
+
