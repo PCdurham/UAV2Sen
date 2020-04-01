@@ -9,10 +9,11 @@ The methods described here use low-altitude UAV orthoimagery in order to train f
 2. Scikit-Learn
 3. Scikit-Image
 4. Rasterio
-5. Pandas
-6. Seaborn
+5. GDAL
+6. Pandas
+7. Seaborn
 
-We recommend using the Anaconda distribution of Python 3 which installs all the needed libraries except rasterio and tensorflow.
+We recommend using the Anaconda distribution of Python 3 which installs all the needed libraries except GDAL, rasterio and tensorflow.
 
 ## Usage
 
@@ -37,7 +38,7 @@ UAV2SEN_CrispCNN will use crisp data and run a crisp classifier algorithm.  The 
 
 UAV2SEN_FuzzyCNN will use the fuzzy membership data.  The routine has similar model tuning options.  The validation data will be used to examine mean and rms values of fuzzy prediction as well as the slope of predicted vs observed fuzzy predictions. There is also an option to display the mapped output of the validation site predictions. The trained model will be saved to disk.
 
-UAV2SEN_Fuzzy2Crisp will train a fuzzy model but will use this model to predict crisp classes. Validation will be done with F1 scores and here the user can adjust the threshold of what constitutes a pure class. There is also an option to display the mapped output of the validation site predictions. The trained model will NOT be saved to disk. Use the fuzzyCNN script above for to produce saved models.
+UAV2SEN_Fuzzy2CrispCNN will train a fuzzy model but will use this model to predict crisp classes. Validation will be done with F1 scores and here the user can adjust the threshold of what constitutes a pure class. There is also an option to display the mapped output of the validation site predictions. The trained model will NOT be saved to disk. Use the fuzzyCNN script above for to produce saved models.
 
 ### Step 2: Large Scale Deployment
 For map production, UAV2SEN_fuzzyCNN_BigTif.py can take a large geocoded image and run a pre-trained CNN model.  The outputs will be 3 geocoded rasters for vegetation membership, water membership and sediment membership.  These will open and overlay directly in a GIS program for furtherprocessing.  The rasters are coded from 0 to 100 thus directly giving the membership % for the given class of a given pixel.  EG, if a pixel of the water membership raster has a value of 56, the pixel is predicted to have 56% water.
