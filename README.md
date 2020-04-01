@@ -43,6 +43,6 @@ UAV2SEN_Fuzzy2CrispCNN will train a fuzzy model but will use this model to predi
 Each script has a long list of adjustable parameters detailed with comments at the start in the user inputs section.
 
 ### Step 2: Large Scale Deployment
-For map production, UAV2SEN_fuzzyCNN_BigTif.py can take a large geocoded image and run a pre-trained CNN model.  The outputs will be 3 geocoded rasters for vegetation membership, water membership and sediment membership.  These will open and overlay directly in a GIS program for furtherprocessing.  The rasters are coded from 0 to 100 thus directly giving the membership % for the given class of a given pixel.  EG, if a pixel of the water membership raster has a value of 56, the pixel is predicted to have 56% water.
+For map production, UAV2SEN_fuzzyCNN_BigTif.py can take a large geocoded image and run a pre-trained CNN model.  The outputs will be 3 geocoded rasters for vegetation membership, water membership and sediment membership.  These will open and overlay directly in a GIS program for furtherprocessing.  The rasters are coded from 0 to 100 thus directly giving the membership % for the given class of a given pixel.  EG, if a pixel of the water membership raster has a value of 56, the pixel is predicted to have 56% water.  For large images, this script will process the fuzzy classifications row-by-row. The result is a process which is less memory intensive and will run on most computers.  But it is considerably slower.  Fuzzy Classification of a full Sentinel 2 tile will take aproximately 1 hour.
 
 
