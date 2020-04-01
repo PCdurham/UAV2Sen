@@ -172,7 +172,7 @@ Ndims = TrainingTensor.shape[3] # Feature Dimensions.
 NClasses = len(LabelSet)  #The number of classes in the data.
 inShape = TrainingTensor.shape[1:]
 
-# define the very deep model with L2 regularization and dropout
+
 
  	# create model
 if size==3: 
