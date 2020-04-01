@@ -43,7 +43,7 @@ import os
 MainData = 'E:\\UAV2SEN\\MLdata\\FullData_4xnoise'  #main data output from UAV2SEN_MakeCrispTensor.py. no extensions, will be fleshed out below
 SiteList = 'E:\\UAV2SEN\\SiteList.csv'#this has the lists of sites with name, month, year and 1s and 0s to identify training and validation sites
 DataFolder = 'E:\\UAV2SEN\\FinalTif\\'  #location of processed tif files
-ModelName = 'test.h5'  #Name and location of the final model to be saved in DataFolder. Add .h5 extension
+ModelName = 'QGIStest.h5'  #Name and location of the final model to be saved in DataFolder. Add .h5 extension
 
 '''Model Features and Labels'''
 FeatureSet =  ['B2','B3','B4','B5','B6','B7','B8','B9','B11','B12'] # pick predictor bands from: ['B1','B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12']
