@@ -10,48 +10,54 @@ __license__ = 'MIT'
 """ Libraries"""
 from tensorflow.keras import regularizers
 from tensorflow.keras import optimizers
-from tensorflow.keras.utils import normalize
 import numpy as np
 import pandas as pd
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, BatchNormalization,Flatten, Conv2D
-from tensorflow.keras.wrappers.scikit_learn import KerasClassifier
-from tensorflow.keras.utils import to_categorical
-from sklearn import metrics
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
-from pickle import dump
 import seaborn as sns
 import statsmodels.api as sm
 from skimage import io
+import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
 import matplotlib.patches as mpatches
+import os
+
 
 
 
 #############################################################
 """User data input. Use the site template and list training and validation choices"""
 #############################################################
+
+'''Folder Settgings'''
 MainData = 'E:\\UAV2SEN\\MLdata\\FullData_4xnoise'  #main data output from UAV2SEN_MakeCrispTensor.py. no extensions, will be fleshed out below
 SiteList = 'E:\\UAV2SEN\\SiteList.csv'#this has the lists of sites with name, month, year and 1s and 0s to identify training and validation sites
-ModelName = 'E:\\UAV2SEN\\MLdata\\CNNdebugged.h5'  #Name and location of the final model to be saved
-DatFolder = 'E:\\UAV2SEN\\FinalTif\\'  #location of processed tif files
-TrainingEpochs = 50 #Typically this can be reduced
-Nfilters = 64 #powers of 2 only
-size=5#size of the tensor tiles
-KernelSize=3 # size of the convolution kernels. Caution becasue mis-setting this could cause bugs in the network definition.  Best keep at 3.
-UT=1.95# upper and lower thresholds to elimninate pure classes from fuzzy error estimates if needed
-LT=-0.05
-ShowValidation = True#if true fuzzy classified images of the validation sites will be displayed
+DataFolder = 'E:\\UAV2SEN\\FinalTif\\'  #location of processed tif files
+ModelName = 'test.h5'  #Name and location of the final model to be saved in DataFolder. Add .h5 extension
 
+'''Model Features and Labels'''
 FeatureSet =  ['B2','B3','B4','B5','B6','B7','B8','B9','B11','B12'] # pick predictor bands from: ['B1','B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12']
 LabelSet = ['WaterMem', 'VegMem','SedMem' ]
+
+'''CNN parameters'''
+TrainingEpochs = 50 #Typically this can be reduced
+Nfilters = 64 
+size=5#size of the tensor tiles
+KernelSize=3 # size of the convolution kernels. Caution becasue mis-setting this could cause bugs in the network definition.  Best keep at 3.
 LearningRate = 0.0001
 Chatty = 1 # set the verbosity of the model training. 
 NAF = 'relu' #NN activation function
+ModelTuning = False #Plot the history of the training losses.  Increase the TrainingEpochs if doing this.
 
-DoHistory = False #Plot the history of the training losses
+
+'''Validation Settings'''
+UT=0.95# upper and lower thresholds to elimninate pure classes from fuzzy error Pred vs Obs displays
+LT=0.05
+ShowValidation = True#if true fuzzy classified images of the validation sites will be displayed
+
+
 
 
 #################################################################################
@@ -74,6 +80,13 @@ def slide_raster_to_tiles(im, size):
 
 
 ####################################################################################
+'''Check that the specified folders and files exist before processing starts'''
+if not(os.path.isfile(MainData+'_fuzzy_'+str(size)+'_T.npy')):
+    raise Exception('Main data file does not exist')
+elif not(os.path.isfile(SiteList)):
+    raise Exception('Site list csv file does not exist')
+elif not(os.path.isdir(DataFolder)):
+    raise Exception('Data folder with pre-processed data not defined')
     
 
 '''Load the tensors and filter out the required training and validation data.'''
@@ -146,25 +159,19 @@ if (len(ValidationLabels.index)) != ValidationTensor.shape[0]:
     raise Exception('Sample number mismatch for VALIDATION tensor and labels')
     
 
-
-        
-    
-'''Range the training tensor from 0-1'''
-#NormFactor = np.max(np.unique(TrainingTensor.reshape(1,-1)))
-#TrainingTensor = TrainingTensor/NormFactor
-#ValidationTensor = ValidationTensor/NormFactor
-#TrainingTensor = normalize(TrainingTensor)
-#ValidationTensor = normalize(ValidationTensor)
  
-Ndims = TrainingTensor.shape[3] # Feature Dimensions. 
-NClasses = 3  #The number of classes in the data. This MUST be the same as the classes used to retrain the model
-inShape = TrainingTensor.shape[1:]
+
 
 
 
 
 ##############################################################################
 """Instantiate the Neural Network pixel-based classifier""" 
+#basic params
+Ndims = TrainingTensor.shape[3] # Feature Dimensions. 
+NClasses = len(LabelSet)  #The number of classes in the data.
+inShape = TrainingTensor.shape[1:]
+
 # define the very deep model with L2 regularization and dropout
 
  	# create model
@@ -193,8 +200,8 @@ elif size==5:
 elif size==7:
     Estimator = Sequential()
     Estimator.add(Conv2D(Nfilters,KernelSize, data_format='channels_last', input_shape=inShape, activation=NAF))
-    Estimator.add(Conv2D(Nfilters//2,KernelSize, activation=NAF))
-    Estimator.add(Conv2D(Nfilters//4,KernelSize, activation=NAF))
+    Estimator.add(Conv2D(Nfilters,KernelSize, activation=NAF))
+    Estimator.add(Conv2D(Nfilters,KernelSize, activation=NAF))
     Estimator.add(Flatten())
     Estimator.add(Dense(64, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
     Estimator.add(BatchNormalization(axis=-1, momentum=0.99, epsilon=0.001, center=True, scale=True, beta_initializer='zeros', gamma_initializer='ones', moving_mean_initializer='zeros', moving_variance_initializer='ones', beta_regularizer=None, gamma_regularizer=None, beta_constraint=None, gamma_constraint=None))
@@ -212,9 +219,48 @@ Estimator.compile(loss='mean_squared_error', optimizer=Optim, metrics = ['accura
 Estimator.summary()
   
 ###############################################################################
-"""Data Fitting"""
+"""Data Splitting"""
 
 X_train, X_test, y_train, y_test = train_test_split(TrainingTensor, TrainingLabels, test_size=0.2, random_state=42)
+if ModelTuning:
+    #Split the data for tuning. Use a double pass of train_test_split to shave off some data
+   
+    history = Estimator.fit(X_train, y_train, epochs = TrainingEpochs, batch_size = 1000, validation_data = (X_test, y_test))
+    #Plot the test results
+    history_dict = history.history
+    loss_values = history_dict['loss']
+    val_loss_values = history_dict['val_loss']
+    
+    epochs = range(1, len(loss_values) + 1)
+    matplotlib.rc('xtick', labelsize=20) 
+    matplotlib.rc('ytick', labelsize=20) 
+    plt.figure()
+    plt.subplot(1,2,1)
+    plt.plot(epochs, loss_values, 'ks', label = 'Training loss')
+    plt.plot(epochs,val_loss_values, 'k:', label = 'Validation loss')
+    #plt.title('Training and Validation Loss')
+    plt.xlabel('Epochs')
+    plt.ylabel('Loss')
+    plt.legend()
+    
+    acc_values = history_dict['accuracy']
+    val_acc_values = history_dict['val_accuracy']
+    plt.subplot(1,2,2)
+    plt.plot(epochs, acc_values, 'ko', label = 'Training accuracy')
+    plt.plot(epochs, val_acc_values, 'k', label = 'Validation accuracy')
+    #plt.title('Training and Validation Accuracy')
+    plt.xlabel('Epochs')
+    plt.ylabel('Accuracy')
+    plt.legend()
+    plt.rcParams.update({'font.size': 22})
+    plt.rcParams.update({'font.weight': 'bold'}) 
+    plt.show()
+
+    
+    raise Exception("Tuning Finished, adjust parameters and re-train the model") # stop the code if still in tuning phase.
+
+
+'''Model Fitting'''
 print('Fitting CNN Classifier on ' + str(len(X_train)) + ' pixels')
 Estimator.fit(X_train, y_train, batch_size=1000, epochs=TrainingEpochs, verbose=Chatty)#, class_weight=weights)
 #EstimatorRF.fit(X_train, y_train)
@@ -222,6 +268,7 @@ Estimator.fit(X_train, y_train, batch_size=1000, epochs=TrainingEpochs, verbose=
 
 
 '''Save model'''
+ModelName=os.path.join(DataFolder,ModelName)
 Estimator.save(ModelName,save_format='h5')
 
 
@@ -238,23 +285,23 @@ Error3 = PredictedPixels[:,2] - Y.SedMem
 ErrFrame = pd.DataFrame({'C1 Err':Error1, 'C2 Err':Error2, 'C3 Err':Error3, 'C1 Obs':Y.WaterMem, 'C2 Obs':Y.VegMem,'C3 Obs':Y.SedMem, 'C1 Pred':PredictedPixels[:,0], 'C2 Pred':PredictedPixels[:,1],'C3 Pred':PredictedPixels[:,2]})
 ErrFrame1 = ErrFrame[ErrFrame['C1 Obs']<UT]
 ErrFrame1 = ErrFrame1[ErrFrame1['C1 Obs']>LT]
-#jplot = sns.jointplot("C1 Obs", 'C1 Pred', data=ErrFrame1, kind="hex", color='b', n_levels=500)
-#jplot.ax_marg_x.set_xlim(-0.2, 1.2)
-#jplot.ax_marg_y.set_ylim(-0.2, 1.2)
+jplot = sns.jointplot("C1 Obs", 'C1 Pred', data=ErrFrame1, kind="hex", color='b')
+jplot.ax_marg_x.set_xlim(-0.2, 1.2)
+jplot.ax_marg_y.set_ylim(-0.2, 1.2)
 
 
 ErrFrame2 = ErrFrame[ErrFrame['C2 Obs']<UT]
 ErrFrame2 = ErrFrame2[ErrFrame2['C2 Obs']>LT]
-#jplot = sns.jointplot("C2 Obs", 'C2 Pred', data=ErrFrame2, kind="hex", color='g', n_levels=500)
-#jplot.ax_marg_x.set_xlim(-0.2, 1.2)
-#jplot.ax_marg_y.set_ylim(-0.2, 1.2)
+jplot = sns.jointplot("C2 Obs", 'C2 Pred', data=ErrFrame2, kind="hex", color='g')
+jplot.ax_marg_x.set_xlim(-0.2, 1.2)
+jplot.ax_marg_y.set_ylim(-0.2, 1.2)
 
 
 ErrFrame3 = ErrFrame[ErrFrame['C3 Obs']<UT]
 ErrFrame3 = ErrFrame3[ErrFrame3['C3 Obs']>LT]
-#jplot = sns.jointplot("C3 Obs", 'C3 Pred', data=ErrFrame3, kind="hex", color='r', n_levels=500)
-#jplot.ax_marg_x.set_xlim(-0.2, 1.2)
-#jplot.ax_marg_y.set_ylim(-0.2, 1.2)
+jplot = sns.jointplot("C3 Obs", 'C3 Pred', data=ErrFrame3, kind="hex", color='r')
+jplot.ax_marg_x.set_xlim(-0.2, 1.2)
+jplot.ax_marg_y.set_ylim(-0.2, 1.2)
 
 
 Error1 = ErrFrame1['C1 Err']
@@ -299,23 +346,23 @@ Error3 = PredictedPixels[:,2] - Y.SedMem
 ErrFrame = pd.DataFrame({'C1 Err':Error1, 'C2 Err':Error2, 'C3 Err':Error3, 'C1 Obs':Y.WaterMem, 'C2 Obs':Y.VegMem,'C3 Obs':Y.SedMem, 'C1 Pred':PredictedPixels[:,0], 'C2 Pred':PredictedPixels[:,1],'C3 Pred':PredictedPixels[:,2]})
 ErrFrame1 = ErrFrame[ErrFrame['C1 Obs']<UT]
 ErrFrame1 = ErrFrame1[ErrFrame1['C1 Obs']>LT]
-#jplot = sns.jointplot("C1 Obs", 'C1 Pred', data=ErrFrame1, kind="kde", color='b', n_levels=500)
-#jplot.ax_marg_x.set_xlim(-0.2, 1.2)
-#jplot.ax_marg_y.set_ylim(-0.2, 1.2)
+jplot = sns.jointplot("C1 Obs", 'C1 Pred', data=ErrFrame1, kind="kde", color='b', n_levels=500)
+jplot.ax_marg_x.set_xlim(-0.2, 1.2)
+jplot.ax_marg_y.set_ylim(-0.2, 1.2)
 
 
 ErrFrame2 = ErrFrame[ErrFrame['C2 Obs']<UT]
 ErrFrame2 = ErrFrame2[ErrFrame2['C2 Obs']>LT]
-#jplot = sns.jointplot("C2 Obs", 'C2 Pred', data=ErrFrame2, kind="kde", color='g', n_levels=500)
-#jplot.ax_marg_x.set_xlim(-0.2, 1.2)
-#jplot.ax_marg_y.set_ylim(-0.2, 1.2)
+jplot = sns.jointplot("C2 Obs", 'C2 Pred', data=ErrFrame2, kind="kde", color='g', n_levels=500)
+jplot.ax_marg_x.set_xlim(-0.2, 1.2)
+jplot.ax_marg_y.set_ylim(-0.2, 1.2)
 
 
 ErrFrame3 = ErrFrame[ErrFrame['C3 Obs']<UT]
 ErrFrame3 = ErrFrame3[ErrFrame3['C3 Obs']>LT]
-#jplot = sns.jointplot("C3 Obs", 'C3 Pred', data=ErrFrame3, kind="kde", color='r', n_levels=500)
-#jplot.ax_marg_x.set_xlim(-0.2, 1.2)
-#jplot.ax_marg_y.set_ylim(-0.2, 1.2)
+jplot = sns.jointplot("C3 Obs", 'C3 Pred', data=ErrFrame3, kind="kde", color='r', n_levels=500)
+jplot.ax_marg_x.set_xlim(-0.2, 1.2)
+jplot.ax_marg_y.set_ylim(-0.2, 1.2)
 
 
 Error1 = ErrFrame1['C1 Err']
@@ -351,7 +398,7 @@ print(reg.summary())#
 '''Show the classified validation images'''
 if ShowValidation:
     for s in range(len(ValidationSites.index)):
-        UAVRaster = io.imread(DatFolder+ValidationSites.Abbrev[s]+'_'+str(ValidationSites.Month[s])+'_'+str(ValidationSites.Year[s])+'_UAVCLS.tif')
+        UAVRaster = io.imread(DataFolder+ValidationSites.Abbrev[s]+'_'+str(ValidationSites.Month[s])+'_'+str(ValidationSites.Year[s])+'_UAVCLS.tif')
         UAVRaster[UAVRaster>3] =0
         UAVRaster[UAVRaster<1] =0
         UAVRasterRGB = np.zeros((UAVRaster.shape[0], UAVRaster.shape[1], 3))
@@ -359,7 +406,7 @@ if ShowValidation:
         UAVRasterRGB[:,:,1]=255*(UAVRaster==2)
         UAVRasterRGB[:,:,2]=255*(UAVRaster==1)
         
-        ValidRasterName = DatFolder+ValidationSites.Abbrev[s]+'_'+str(ValidationSites.Month[s])+'_'+str(ValidationSites.Year[s])+'_S2.tif'
+        ValidRasterName = DataFolder+ValidationSites.Abbrev[s]+'_'+str(ValidationSites.Month[s])+'_'+str(ValidationSites.Year[s])+'_S2.tif'
         ValidRaster = io.imread(ValidRasterName)
         ValidRasterIR = np.zeros((ValidRaster.shape[0], ValidRaster.shape[1],3))
         ValidRasterIR[:,:,0] = ValidRaster[:,:,10]
@@ -392,7 +439,7 @@ if ShowValidation:
         plt.title(ValidationSites.Abbrev[s]+'_'+str(ValidationSites.Month[s])+'_'+str(ValidationSites.Year[s]) + ' Bands (11,3,2)')
         plt.subplot(2,2,2)
         plt.imshow(PredictedClassImage)
-        plt.title(ValidationSites.Abbrev[s]+'_'+str(ValidationSites.Month[s])+'_'+str(ValidationSites.Year[s]) + ' Fuzzy Class')
+        plt.title(' Fuzzy Class')
         class1_box = mpatches.Patch(color='red', label='Sediment')
         class2_box = mpatches.Patch(color='lime', label='Veg.')
         class3_box = mpatches.Patch(color='blue', label='Water')
