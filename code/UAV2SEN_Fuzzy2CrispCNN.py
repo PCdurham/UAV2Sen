@@ -44,18 +44,18 @@ import os
 #############################################################
 
 '''Folder Settgings'''
-MainData = 'E:\\UAV2SEN\\MLdata\\FullData_4xnoise'  #main data output from UAV2SEN_MakeCrispTensor.py. no extensions, will be fleshed out below
-SiteList = 'E:\\UAV2SEN\\SiteList.csv'#this has the lists of sites with name, month, year and 1s and 0s to identify training and validation sites
-DataFolder = 'E:\\UAV2SEN\\FinalTif\\'  #location of processed tif files
+MainData = 'EMPTY'  #main data output from UAV2SEN_MakeCrispTensor.py. no extensions, will be fleshed out below
+SiteList = 'EMPTY'#this has the lists of sites with name, month, year and 1s and 0s to identify training and validation sites
+DataFolder = 'EMPTY'  #location of processed tif files
 
 
 '''Model Features and Labels'''
 LabelSet = ['WaterMem', 'VegMem','SedMem' ]
-FeatureSet = ['B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12'] # pick predictor bands from: ['B1','B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12']
+FeatureSet = ['B1','B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12'] # pick predictor bands from: ['B1','B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12']
 
 '''CNN parameters'''
 TrainingEpochs = 50 #Use model tuning to adjust this and prevent overfitting
-Nfilters = 16
+Nfilters = 32
 size=5#size of the tensor tiles
 KernelSize=3 # size of the convolution kernels
 LearningRate = 0.001
