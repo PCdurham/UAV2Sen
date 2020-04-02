@@ -369,9 +369,9 @@ if ShowValidation:
 
         PredictedPixels = np.int16(PredictedPixels.reshape(ValidRaster.shape[0]-size, ValidRaster.shape[1]-size))
         PredictedClassImage=np.int16(np.zeros((PredictedPixels.shape[0], PredictedPixels.shape[1],3)))
-        PredictedClassImage[:,:,0]=255*(PredictedPixels==3)
-        PredictedClassImage[:,:,1]=255*(PredictedPixels==2)
-        PredictedClassImage[:,:,2]=255*(PredictedPixels==1)
+        PredictedClassImage[:,:,0]=100*(PredictedPixels==3)
+        PredictedClassImage[:,:,1]=100*(PredictedPixels==2)
+        PredictedClassImage[:,:,2]=100*(PredictedPixels==1)
 
         cmapCHM = colors.ListedColormap(['black','red','lime','blue'])
         plt.figure()
