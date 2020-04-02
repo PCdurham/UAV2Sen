@@ -380,7 +380,7 @@ if ShowValidation:
         plt.title(ValidationSites.Abbrev[s]+'_'+str(ValidationSites.Month[s])+'_'+str(ValidationSites.Year[s]) + ' Bands (11,3,2)')
         plt.subplot(2,2,2)
         plt.imshow(PredictedClassImage)
-        plt.title(' Fuzzy Class')
+        plt.title(' Crisp Class')
         class1_box = mpatches.Patch(color='red', label='Sediment')
         class2_box = mpatches.Patch(color='lime', label='Veg.')
         class3_box = mpatches.Patch(color='blue', label='Water')
