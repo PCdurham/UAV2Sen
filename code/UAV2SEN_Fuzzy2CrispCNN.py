@@ -334,9 +334,9 @@ if ShowValidation:
 
         PredictedPixelsRaster = np.int16(ClassPredicted.reshape(ValidRaster.shape[0]-size, ValidRaster.shape[1]-size))
         PredictedClassImage=np.int16(np.zeros((PredictedPixelsRaster.shape[0], PredictedPixelsRaster.shape[1],3)))
-        PredictedClassImage[:,:,0]=255*(PredictedPixelsRaster==3)
-        PredictedClassImage[:,:,1]=255*(PredictedPixelsRaster==2)
-        PredictedClassImage[:,:,2]=255*(PredictedPixelsRaster==1)
+        PredictedClassImage[:,:,0]=100*(PredictedPixelsRaster==3)
+        PredictedClassImage[:,:,1]=100*(PredictedPixelsRaster==2)
+        PredictedClassImage[:,:,2]=100*(PredictedPixelsRaster==1)
 
 
 
