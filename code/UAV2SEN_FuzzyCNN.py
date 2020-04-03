@@ -21,11 +21,13 @@ from tensorflow.keras import optimizers
 import numpy as np
 import pandas as pd
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense, BatchNormalization,Flatten, Conv2D
+from tensorflow.keras.layers import Dense, BatchNormalization,Flatten, Conv2D, LeakyReLU
+
 from sklearn.model_selection import train_test_split
 import seaborn as sns
 import statsmodels.api as sm
 from skimage import io
+from skimage.transform import downscale_local_mean
 import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
@@ -40,30 +42,30 @@ import os
 #############################################################
 
 '''Folder Settgings'''
-MainData = 'EMPTY'  #main data output from UAV2SEN_MakeCrispTensor.py. no extensions, will be fleshed out below
-SiteList = 'EMPTY'#this has the lists of sites with name, month, year and 1s and 0s to identify training and validation sites
-DataFolder = 'EMPTY'  #location of processed tif files
-ModelName = 'EMPTY'  #Name and location of the final model to be saved in DataFolder. Add .h5 extension
+MainData = 'E:\\UAV2SEN\\MLdata\\Fulldata_4xnoise'  #main data output from UAV2SEN_MakeCrispTensor.py. no extensions, will be fleshed out below
+SiteList = 'E:\\UAV2SEN\\SiteList.csv'#this has the lists of sites with name, month, year and 1s and 0s to identify training and validation sites
+DataFolder = 'E:\\UAV2SEN\\FinalTif\\'  #location of processed tif files
+ModelName = 'Fuzzy_AllBands_5_All2018'  #Name and location of the final model to be saved in DataFolder. Add .h5 extension
 
 '''Model Features and Labels'''
 FeatureSet =  ['B1','B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12'] # pick predictor bands from: ['B1','B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12']
 LabelSet = ['WaterMem', 'VegMem','SedMem' ]
 
 '''CNN parameters'''
-TrainingEpochs = 50 #Use model tuning to adjust this and prevent overfitting
-Nfilters = 64 
+TrainingEpochs = 100 #Use model tuning to adjust this and prevent overfitting
+Nfilters = 32
 size=5#size of the tensor tiles
 KernelSize=3 # size of the convolution kernels. Caution becasue mis-setting this could cause bugs in the network definition.  Best keep at 3.
-LearningRate = 0.0001
+LearningRate = 0.0005
 Chatty = 1 # set the verbosity of the model training. 
-NAF = 'relu' #NN activation function
+NAF = 'tanh' #NN activation function
 ModelTuning = False #Plot the history of the training losses.  Increase the TrainingEpochs if doing this.
 
 
 '''Validation Settings'''
 UT=0.95# upper and lower thresholds to elimninate pure classes from fuzzy error Pred vs Obs displays
 LT=0.05
-ShowValidation = False#if true fuzzy classified images of the validation sites will be displayed
+ShowValidation = True#if true fuzzy classified images of the validation sites will be displayed.  Warning: xpensive to compute.
 
 
 
@@ -85,6 +87,15 @@ def slide_raster_to_tiles(im, size):
             B+=1
 
     return TileTensor
+
+def GetDominantClassErrors(Obs, Pred):
+    Dominant=np.zeros((len(Obs),2))
+    for s in range(len(Obs)):
+        order=np.argsort(Obs[s,:])#dominant class in ground truth
+        Dominant[s,0]=Pred[s,order[-1]]-Obs[s,order[-1]]
+        Dominant[s,1]=Pred[s,order[-2]]-Obs[s,order[-2]]
+    return Dominant
+        
 
 
 ####################################################################################
@@ -149,6 +160,12 @@ ValidationTensor = np.compress(MasterValid,ValidationTensor, axis=0)#will delete
 #Set the labels
 TrainingLabels = TrainingDF[LabelSet]
 ValidationLabels = ValidationDF[LabelSet]
+
+#remove the 4x data augmentation in the validation data
+Data=np.asarray(range(0,len(ValidationLabels)))
+Valid=(Data%4)==0
+ValidationTensor = np.compress(Valid,ValidationTensor, axis=0)
+ValidationLabels=ValidationLabels[Valid]
     
 #check for empty dataframes and raise an error if found
 
@@ -285,162 +302,111 @@ Estimator.save(ModelName,save_format='h5')
 '''Validate the model'''
 #Test data
 PredictedPixels = Estimator.predict(X_test)
-Y=y_test
-
-Error1 = PredictedPixels[:,0] - Y.WaterMem
-Error2 = PredictedPixels[:,1] - Y.VegMem
-Error3 = PredictedPixels[:,2] - Y.SedMem
 
 
-ErrFrame = pd.DataFrame({'C1 Err':Error1, 'C2 Err':Error2, 'C3 Err':Error3, 'C1 Obs':Y.WaterMem, 'C2 Obs':Y.VegMem,'C3 Obs':Y.SedMem, 'C1 Pred':PredictedPixels[:,0], 'C2 Pred':PredictedPixels[:,1],'C3 Pred':PredictedPixels[:,2]})
-ErrFrame1 = ErrFrame[ErrFrame['C1 Obs']<UT]
-ErrFrame1 = ErrFrame1[ErrFrame1['C1 Obs']>LT]
-jplot = sns.jointplot("C1 Obs", 'C1 Pred', data=ErrFrame1, kind="hex", color='b')
-jplot.ax_marg_x.set_xlim(-0.2, 1.2)
-jplot.ax_marg_y.set_ylim(-0.2, 1.2)
+DominantErrors=GetDominantClassErrors(np.asarray(y_test), PredictedPixels)
+D={'Dominant_Error':DominantErrors[:,0],'Sub-Dominant_Error':DominantErrors[:,1] }
+DominantErrorsDF = pd.DataFrame(D)
 
+RMSdom = np.sqrt(np.median(DominantErrors[:,0]*DominantErrors[:,0]))
+RMSsubdom = np.sqrt(np.median(DominantErrors[:,1]*DominantErrors[:,1]))
+QPAdom = 1-np.sum(np.abs(DominantErrors[:,0]>0.25))/len(DominantErrors[:,0])
+QPAsubdom = 1-np.sum(np.abs(DominantErrors[:,1]>0.25))/len(DominantErrors[:,1])
 
-ErrFrame2 = ErrFrame[ErrFrame['C2 Obs']<UT]
-ErrFrame2 = ErrFrame2[ErrFrame2['C2 Obs']>LT]
-jplot = sns.jointplot("C2 Obs", 'C2 Pred', data=ErrFrame2, kind="hex", color='g')
-jplot.ax_marg_x.set_xlim(-0.2, 1.2)
-jplot.ax_marg_y.set_ylim(-0.2, 1.2)
+print('20% test mean error for DOMINANT class= ', str(np.mean(DominantErrors[:,0])))
+print('20% test RMS error for DOMINANT class= ', str(RMSdom))
+print('20% test QPA for the DOMINANT class= '+ str(QPAdom))
+print('20% test mean error for SUB-DOMINANT class= ', str(np.mean(DominantErrors[:,1])))
+print('20% test RMS error for SUB-DOMINANT class= ', str(RMSsubdom))
+print('20% test QPA for the SUB-DOMINANT class= '+ str(QPAsubdom))
 
-
-ErrFrame3 = ErrFrame[ErrFrame['C3 Obs']<UT]
-ErrFrame3 = ErrFrame3[ErrFrame3['C3 Obs']>LT]
-jplot = sns.jointplot("C3 Obs", 'C3 Pred', data=ErrFrame3, kind="hex", color='r')
-jplot.ax_marg_x.set_xlim(-0.2, 1.2)
-jplot.ax_marg_y.set_ylim(-0.2, 1.2)
-
-
-Error1 = ErrFrame1['C1 Err']
-Error2 = ErrFrame2['C2 Err']
-Error3 = ErrFrame3['C3 Err']
-RMS1 = np.sqrt(np.mean(Error1*Error1))
-RMS2 = np.sqrt(np.mean(Error2*Error2))
-RMS3 = np.sqrt(np.mean(Error3*Error3))
-Errors = np.concatenate((Error1, Error2, Error3))
-RMSall = np.sqrt(np.mean(Errors*Errors))
-print('20% test mean error =', str(np.mean(Errors)))
-print('20% test RMS error =', str(RMSall))
 print('\n')
-print('Water Fit Stats')
-X=sm.add_constant(ErrFrame1['C1 Obs'])
-linemodel = sm.OLS(ErrFrame1['C1 Pred'], X)
-reg = linemodel.fit()
-print(reg.summary())
+datbins=np.linspace(-1,1,500)
+plt.figure()
+plt.subplot(1,2,1)
+sns.distplot(DominantErrorsDF.Dominant_Error, axlabel='Dominant Class Errors', bins=datbins, color='k')
+plt.title('(Median, RMS, QPA) = '+' ('+str(int(100*np.median(DominantErrors[:,0])))+ ', '+str(int(100*RMSdom))+', '+str(int(100*QPAdom))+ ')')
+plt.ylabel('20% Test Frequency')
+plt.subplot(1,2,2)
+sns.distplot(DominantErrorsDF['Sub-Dominant_Error'], axlabel='Sub-Dominant Class Errors', bins=datbins, color='k')
+plt.title('(Median, RMS, QPA) = '+' ('+str(int(100*np.median(DominantErrors[:,1])))+ ', '+str(int(100*RMSsubdom))+', '+str(int(100*QPAsubdom))+ ')')
 
-print('Veg Fit Stats')
-X=sm.add_constant(ErrFrame2['C2 Obs'])
-linemodel = sm.OLS(ErrFrame2['C2 Pred'], X)
-reg = linemodel.fit()
-print(reg.summary())
-
-print('Sed Fit Stats')
-X=sm.add_constant(ErrFrame3['C3 Obs'])
-linemodel = sm.OLS(ErrFrame3['C3 Pred'], X)
-reg = linemodel.fit()
-print(reg.summary())#
 
 
 #Validation data
 PredictedPixels = Estimator.predict(ValidationTensor)
-Y=ValidationLabels
-
-Error1 = PredictedPixels[:,0] - Y.WaterMem
-Error2 = PredictedPixels[:,1] - Y.VegMem
-Error3 = PredictedPixels[:,2] - Y.SedMem
 
 
-ErrFrame = pd.DataFrame({'C1 Err':Error1, 'C2 Err':Error2, 'C3 Err':Error3, 'C1 Obs':Y.WaterMem, 'C2 Obs':Y.VegMem,'C3 Obs':Y.SedMem, 'C1 Pred':PredictedPixels[:,0], 'C2 Pred':PredictedPixels[:,1],'C3 Pred':PredictedPixels[:,2]})
-ErrFrame1 = ErrFrame[ErrFrame['C1 Obs']<UT]
-ErrFrame1 = ErrFrame1[ErrFrame1['C1 Obs']>LT]
-jplot = sns.jointplot("C1 Obs", 'C1 Pred', data=ErrFrame1, kind="kde", color='b', n_levels=500)
-jplot.ax_marg_x.set_xlim(-0.2, 1.2)
-jplot.ax_marg_y.set_ylim(-0.2, 1.2)
+DominantErrors=GetDominantClassErrors(np.asarray(ValidationLabels), PredictedPixels)
+D={'Dominant_Error':DominantErrors[:,0],'Sub-Dominant_Error':DominantErrors[:,1] }
+DominantErrorsDF = pd.DataFrame(D)
+
+RMSdom = np.sqrt(np.median(DominantErrors[:,0]*DominantErrors[:,0]))
+RMSsubdom = np.sqrt(np.median(DominantErrors[:,1]*DominantErrors[:,1]))
+QPAdom = 1-np.sum(np.abs(DominantErrors[:,0]>0.25))/len(DominantErrors[:,0])
+QPAsubdom = 1-np.sum(np.abs(DominantErrors[:,1]>0.25))/len(DominantErrors[:,1])
 
 
-ErrFrame2 = ErrFrame[ErrFrame['C2 Obs']<UT]
-ErrFrame2 = ErrFrame2[ErrFrame2['C2 Obs']>LT]
-jplot = sns.jointplot("C2 Obs", 'C2 Pred', data=ErrFrame2, kind="kde", color='g', n_levels=500)
-jplot.ax_marg_x.set_xlim(-0.2, 1.2)
-jplot.ax_marg_y.set_ylim(-0.2, 1.2)
-
-
-ErrFrame3 = ErrFrame[ErrFrame['C3 Obs']<UT]
-ErrFrame3 = ErrFrame3[ErrFrame3['C3 Obs']>LT]
-jplot = sns.jointplot("C3 Obs", 'C3 Pred', data=ErrFrame3, kind="kde", color='r', n_levels=500)
-jplot.ax_marg_x.set_xlim(-0.2, 1.2)
-jplot.ax_marg_y.set_ylim(-0.2, 1.2)
-
-
-Error1 = ErrFrame1['C1 Err']
-Error2 = ErrFrame2['C2 Err']
-Error3 = ErrFrame3['C3 Err']
-RMS1 = np.sqrt(np.mean(Error1*Error1))
-RMS2 = np.sqrt(np.mean(Error2*Error2))
-RMS3 = np.sqrt(np.mean(Error3*Error3))
-Errors = np.concatenate((Error1, Error2, Error3))
-RMSall = np.sqrt(np.mean(Errors*Errors))
-print('Validation mean error =', str(np.mean(Errors)))
-print('Validation RMS error =', str(RMSall))
+print('Validation mean error for DOMINANT class= ', str(np.mean(DominantErrors[:,0])))
+print('Validation RMS error for DOMINANT class= ', str(RMSdom))
+print('Validation QPA for the DOMINANT class= '+ str(QPAdom))
+print('Validation mean error for SUB-DOMINANT class= ', str(np.mean(DominantErrors[:,1])))
+print('Validation RMS error for SUB-DOMINANT class= ', str(RMSsubdom))
+print('Validation QPA for the SUB-DOMINANT class= '+ str(QPAsubdom))
 print('\n')
-print('Water Fit Stats')
-X=sm.add_constant(ErrFrame1['C1 Obs'])
-linemodel = sm.OLS(ErrFrame1['C1 Pred'], X)
-reg = linemodel.fit()
-print(reg.summary())
-
-print('Veg Fit Stats')
-X=sm.add_constant(ErrFrame2['C2 Obs'])
-linemodel = sm.OLS(ErrFrame2['C2 Pred'], X)
-reg = linemodel.fit()
-print(reg.summary())
-
-print('Sed Fit Stats')
-X=sm.add_constant(ErrFrame3['C3 Obs'])
-linemodel = sm.OLS(ErrFrame3['C3 Pred'], X)
-reg = linemodel.fit()
-print(reg.summary())#
+datbins=np.linspace(-1,1,500)
+plt.figure()
+plt.subplot(1,2,1)
+sns.distplot(DominantErrorsDF.Dominant_Error, axlabel='Dominant Class Errors', bins=datbins, color='b')
+plt.title('(Median, RMS, QPA) = '+' ('+str(int(100*np.median(DominantErrors[:,0])))+ ', '+str(int(100*RMSdom))+', '+str(int(100*QPAdom))+ ')')
+plt.ylabel('Validation Frequency')
+plt.subplot(1,2,2)
+sns.distplot(DominantErrorsDF['Sub-Dominant_Error'], axlabel='Sub-Dominant Class Errors', bins=datbins, color='b')
+plt.title('(Median, RMS, QPA) = '+' ('+str(int(100*np.median(DominantErrors[:,1])))+ ', '+str(int(100*RMSsubdom))+', '+str(int(100*QPAsubdom))+ ')')
 
 
 '''Show the classified validation images'''
 if ShowValidation:
     for s in range(len(ValidationSites.index)):
-        UAVRaster = io.imread(DataFolder+ValidationSites.Abbrev[s]+'_'+str(ValidationSites.Month[s])+'_'+str(ValidationSites.Year[s])+'_UAVCLS.tif')
+        UAVRaster = io.imread(DataFolder+'Cropped_'+ValidationSites.Abbrev[s]+'_'+str(ValidationSites.Month[s])+'_'+str(ValidationSites.Year[s])+'_UAVCLS.tif')
         UAVRaster[UAVRaster>3] =0
         UAVRaster[UAVRaster<1] =0
-        UAVRasterRGB = np.zeros((UAVRaster.shape[0], UAVRaster.shape[1], 3))
+        
+        UAVRasterRGB = np.zeros((UAVRaster.shape[0], UAVRaster.shape[1], 4))
         UAVRasterRGB[:,:,0]=255*(UAVRaster==3)
         UAVRasterRGB[:,:,1]=255*(UAVRaster==2)
         UAVRasterRGB[:,:,2]=255*(UAVRaster==1)
-        
-        ValidRasterName = DataFolder+ValidationSites.Abbrev[s]+'_'+str(ValidationSites.Month[s])+'_'+str(ValidationSites.Year[s])+'_S2.tif'
+        UAVRasterRGB[:,:,3] = 255*np.float32(UAVRaster != 0.0)
+        UAVRasterRGB= downscale_local_mean(UAVRasterRGB, (10,10,1))
+        ValidRasterName = DataFolder+'Cropped_'+ValidationSites.Abbrev[s]+'_'+str(ValidationSites.Month[s])+'_'+str(ValidationSites.Year[s])+'_S2.tif'
         ValidRaster = io.imread(ValidRasterName)
         ValidRasterIR = np.zeros((ValidRaster.shape[0], ValidRaster.shape[1],3))
         ValidRasterIR[:,:,0] = ValidRaster[:,:,10]
         ValidRasterIR[:,:,1] = ValidRaster[:,:,4]
         ValidRasterIR[:,:,2] = ValidRaster[:,:,3]
+        #ValidRasterIR[:,:,3]= np.float32((ValidRasterIR[:,:,0] == 0.0)&(ValidRasterIR[:,:,1] == 0.0))
         ValidRasterIR = ValidRasterIR/np.max(np.unique(ValidRasterIR))
-        ValidTensor = slide_raster_to_tiles(ValidRaster, size)
+        ValidationTensor = slide_raster_to_tiles(ValidRaster, size)
         Valid=np.zeros(12)
         for n in range(1,13):
             if ('B'+str(n)) in FeatureSet:
                 Valid[n-1]=1
         
-        ValidTensor = np.compress(Valid, ValidTensor, axis=3)
+        ValidationTensor = np.compress(Valid, ValidationTensor, axis=3)
         #print(ValidTensor.shape)
-        PredictedPixels = Estimator.predict(ValidTensor)
+        PredictedPixels = Estimator.predict(ValidationTensor)
         
 
-        PredictedWaterImage = np.int16(100*PredictedPixels[:,0].reshape(ValidRaster.shape[0]-size, ValidRaster.shape[1]-size))
-        PredictedVegImage = np.int16(100*PredictedPixels[:,1].reshape(ValidRaster.shape[0]-size, ValidRaster.shape[1]-size))
-        PredictedSedImage = np.int16(100*PredictedPixels[:,2].reshape(ValidRaster.shape[0]-size, ValidRaster.shape[1]-size))
+        PredictedWaterImage = np.int16(250*PredictedPixels[:,0].reshape(ValidRaster.shape[0]-size, ValidRaster.shape[1]-size))
+        PredictedVegImage = np.int16(250*PredictedPixels[:,1].reshape(ValidRaster.shape[0]-size, ValidRaster.shape[1]-size))
+        PredictedSedImage = np.int16(250*PredictedPixels[:,2].reshape(ValidRaster.shape[0]-size, ValidRaster.shape[1]-size))
         PredictedClassImage=np.int16(np.zeros((PredictedWaterImage.shape[0], PredictedWaterImage.shape[1],3)))
         PredictedClassImage[:,:,0]=PredictedSedImage
         PredictedClassImage[:,:,1]=PredictedVegImage
         PredictedClassImage[:,:,2]=PredictedWaterImage
+        #PredictedClassImage[:,:,3]==255*np.float32((ValidRasterIR[1+size//2:-(size//2),1+size//2:-(size//2),0] != 0.0)&(ValidRasterIR[1+size//2:-(size//2),1+size//2:-(size//2),1] != 0.0))
+#        DominantErrors=GetDominantClassErrors(np.asarray(ValidationLabels), PredictedPixels)
+#        DominantErrorImage = np.int16(255*DominantErrors[:,0].reshape(ValidRaster.shape[0]-size, ValidRaster.shape[1]-size))
 
         cmapCHM = colors.ListedColormap(['black','red','lime','blue'])
         plt.figure()
@@ -454,12 +420,15 @@ if ShowValidation:
         class2_box = mpatches.Patch(color='lime', label='Veg.')
         class3_box = mpatches.Patch(color='blue', label='Water')
         ax=plt.gca()
-        ax.legend(handles=[class1_box,class2_box,class3_box], bbox_to_anchor=(1, -0.2),prop={'size': 20})
+        ax.legend(handles=[class1_box,class2_box,class3_box], bbox_to_anchor=(1, -0.2),prop={'size': 24})
         
-        #ax.legend(handles=[class1_box,class2_box,class3_box])
+        ax.legend(handles=[class1_box,class2_box,class3_box])
         plt.subplot(2,2,3)
         plt.imshow(np.int16(UAVRasterRGB))
         plt.xlabel('UAV Ground-Truth Data')
+#        
+#        plt.subplot(2,2,2)
+#        plt.imshow(DominantErrorImage)
         
         
         
