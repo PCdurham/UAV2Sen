@@ -21,13 +21,13 @@ from tensorflow.keras import optimizers
 import numpy as np
 import pandas as pd
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense, BatchNormalization,Flatten, Conv2D, LeakyReLU
+from tensorflow.keras.layers import Dense, BatchNormalization,Flatten, Conv2D
 
 from sklearn.model_selection import train_test_split
 import seaborn as sns
-import statsmodels.api as sm
+#import statsmodels.api as sm
 from skimage import io
-from skimage.transform import downscale_local_mean
+from skimage.transform import downscale_local_mean, resize
 import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
@@ -43,16 +43,16 @@ import os
 
 '''Folder Settgings'''
 MainData = 'E:\\UAV2SEN\\MLdata\\Fulldata_4xnoise'  #main data output from UAV2SEN_MakeCrispTensor.py. no extensions, will be fleshed out below
-SiteList = 'E:\\UAV2SEN\\SiteList.csv'#this has the lists of sites with name, month, year and 1s and 0s to identify training and validation sites
+SiteList = 'E:\\UAV2SEN\\Results\\Experiments\\SiteList_exp3d.csv'#this has the lists of sites with name, month, year and 1s and 0s to identify training and validation sites
 DataFolder = 'E:\\UAV2SEN\\FinalTif\\'  #location of processed tif files
-ModelName = 'Fuzzy_AllBands_5_All2018'  #Name and location of the final model to be saved in DataFolder. Add .h5 extension
+ModelName = 'Fuzzy_exp3d'  #Name and location of the final model to be saved in DataFolder. Add .h5 extension
 
 '''Model Features and Labels'''
 FeatureSet =  ['B1','B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12'] # pick predictor bands from: ['B1','B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12']
 LabelSet = ['WaterMem', 'VegMem','SedMem' ]
 
 '''CNN parameters'''
-TrainingEpochs = 100 #Use model tuning to adjust this and prevent overfitting
+TrainingEpochs = 75 #Use model tuning to adjust this and prevent overfitting
 Nfilters = 32
 size=5#size of the tensor tiles
 KernelSize=3 # size of the convolution kernels. Caution becasue mis-setting this could cause bugs in the network definition.  Best keep at 3.
@@ -308,10 +308,10 @@ DominantErrors=GetDominantClassErrors(np.asarray(y_test), PredictedPixels)
 D={'Dominant_Error':DominantErrors[:,0],'Sub-Dominant_Error':DominantErrors[:,1] }
 DominantErrorsDF = pd.DataFrame(D)
 
-RMSdom = np.sqrt(np.median(DominantErrors[:,0]*DominantErrors[:,0]))
-RMSsubdom = np.sqrt(np.median(DominantErrors[:,1]*DominantErrors[:,1]))
-QPAdom = 1-np.sum(np.abs(DominantErrors[:,0]>0.25))/len(DominantErrors[:,0])
-QPAsubdom = 1-np.sum(np.abs(DominantErrors[:,1]>0.25))/len(DominantErrors[:,1])
+RMSdom = np.sqrt(np.mean(DominantErrors[:,0]*DominantErrors[:,0]))
+RMSsubdom = np.sqrt(np.mean(DominantErrors[:,1]*DominantErrors[:,1]))
+QPAdom = np.sum(np.abs(DominantErrors[:,0]<0.25))/len(DominantErrors[:,0])
+QPAsubdom = np.sum(np.abs(DominantErrors[:,1]<0.25))/len(DominantErrors[:,1])
 
 print('20% test mean error for DOMINANT class= ', str(np.mean(DominantErrors[:,0])))
 print('20% test RMS error for DOMINANT class= ', str(RMSdom))
@@ -341,10 +341,10 @@ DominantErrors=GetDominantClassErrors(np.asarray(ValidationLabels), PredictedPix
 D={'Dominant_Error':DominantErrors[:,0],'Sub-Dominant_Error':DominantErrors[:,1] }
 DominantErrorsDF = pd.DataFrame(D)
 
-RMSdom = np.sqrt(np.median(DominantErrors[:,0]*DominantErrors[:,0]))
-RMSsubdom = np.sqrt(np.median(DominantErrors[:,1]*DominantErrors[:,1]))
-QPAdom = 1-np.sum(np.abs(DominantErrors[:,0]>0.25))/len(DominantErrors[:,0])
-QPAsubdom = 1-np.sum(np.abs(DominantErrors[:,1]>0.25))/len(DominantErrors[:,1])
+RMSdom = np.sqrt(np.mean(DominantErrors[:,0]*DominantErrors[:,0]))
+RMSsubdom = np.sqrt(np.mean(DominantErrors[:,1]*DominantErrors[:,1]))
+QPAdom = np.sum(np.abs(DominantErrors[:,0]<0.25))/len(DominantErrors[:,0])
+QPAsubdom = np.sum(np.abs(DominantErrors[:,1]<0.25))/len(DominantErrors[:,1])
 
 
 print('Validation mean error for DOMINANT class= ', str(np.mean(DominantErrors[:,0])))
@@ -354,6 +354,7 @@ print('Validation mean error for SUB-DOMINANT class= ', str(np.mean(DominantErro
 print('Validation RMS error for SUB-DOMINANT class= ', str(RMSsubdom))
 print('Validation QPA for the SUB-DOMINANT class= '+ str(QPAsubdom))
 print('\n')
+
 datbins=np.linspace(-1,1,500)
 plt.figure()
 plt.subplot(1,2,1)
@@ -380,12 +381,16 @@ if ShowValidation:
         UAVRasterRGB= downscale_local_mean(UAVRasterRGB, (10,10,1))
         ValidRasterName = DataFolder+'Cropped_'+ValidationSites.Abbrev[s]+'_'+str(ValidationSites.Month[s])+'_'+str(ValidationSites.Year[s])+'_S2.tif'
         ValidRaster = io.imread(ValidRasterName)
-        ValidRasterIR = np.zeros((ValidRaster.shape[0], ValidRaster.shape[1],3))
-        ValidRasterIR[:,:,0] = ValidRaster[:,:,10]
-        ValidRasterIR[:,:,1] = ValidRaster[:,:,4]
-        ValidRasterIR[:,:,2] = ValidRaster[:,:,3]
-        #ValidRasterIR[:,:,3]= np.float32((ValidRasterIR[:,:,0] == 0.0)&(ValidRasterIR[:,:,1] == 0.0))
-        ValidRasterIR = ValidRasterIR/np.max(np.unique(ValidRasterIR))
+        ValidRasterIR = np.uint8(np.zeros((ValidRaster.shape[0], ValidRaster.shape[1],4)))
+        stretch=2
+        ValidRasterIR[:,:,0] = np.int16(stretch*255*ValidRaster[:,:,10])
+        ValidRasterIR[:,:,1] = np.int16(stretch*255*ValidRaster[:,:,5])
+        ValidRasterIR[:,:,2] = np.int16(stretch*255*ValidRaster[:,:,4])
+        ValidRasterIR[:,:,3]= 255*np.int16((ValidRasterIR[:,:,0] != 0.0)&(ValidRasterIR[:,:,1] != 0.0))
+#        ValidRasterIR[:,:,0] = adjust_sigmoid(ValidRasterIR[:,:,0], cutoff=0.5, gain=10, inv=False)
+#        ValidRasterIR[:,:,1] = adjust_sigmoid(ValidRasterIR[:,:,1], cutoff=0.5, gain=10, inv=False)
+#        ValidRasterIR[:,:,2] = adjust_sigmoid(ValidRasterIR[:,:,2], cutoff=0.5, gain=10, inv=False)
+        #ValidRasterIR = ValidRasterIR/np.max(np.unique(ValidRasterIR))
         ValidationTensor = slide_raster_to_tiles(ValidRaster, size)
         Valid=np.zeros(12)
         for n in range(1,13):
@@ -397,35 +402,43 @@ if ShowValidation:
         PredictedPixels = Estimator.predict(ValidationTensor)
         
 
-        PredictedWaterImage = np.int16(250*PredictedPixels[:,0].reshape(ValidRaster.shape[0]-size, ValidRaster.shape[1]-size))
-        PredictedVegImage = np.int16(250*PredictedPixels[:,1].reshape(ValidRaster.shape[0]-size, ValidRaster.shape[1]-size))
-        PredictedSedImage = np.int16(250*PredictedPixels[:,2].reshape(ValidRaster.shape[0]-size, ValidRaster.shape[1]-size))
-        PredictedClassImage=np.int16(np.zeros((PredictedWaterImage.shape[0], PredictedWaterImage.shape[1],3)))
+        PredictedWaterImage = np.int16(255*PredictedPixels[:,0].reshape(ValidRaster.shape[0]-size, ValidRaster.shape[1]-size))
+        PredictedVegImage = np.int16(255*PredictedPixels[:,1].reshape(ValidRaster.shape[0]-size, ValidRaster.shape[1]-size))
+        PredictedSedImage = np.int16(255*PredictedPixels[:,2].reshape(ValidRaster.shape[0]-size, ValidRaster.shape[1]-size))
+        PredictedClassImage=np.int16(np.zeros((PredictedWaterImage.shape[0], PredictedWaterImage.shape[1],4)))
         PredictedClassImage[:,:,0]=PredictedSedImage
         PredictedClassImage[:,:,1]=PredictedVegImage
         PredictedClassImage[:,:,2]=PredictedWaterImage
+        mask = 255*np.int16((ValidRasterIR[:,:,0] != 0.0)&(ValidRasterIR[:,:,1] != 0.0))
+        mask = np.int16(resize(mask, (PredictedClassImage.shape[0], PredictedClassImage.shape[1]), preserve_range=True))
+        PredictedClassImage[:,:,3]=mask
         #PredictedClassImage[:,:,3]==255*np.float32((ValidRasterIR[1+size//2:-(size//2),1+size//2:-(size//2),0] != 0.0)&(ValidRasterIR[1+size//2:-(size//2),1+size//2:-(size//2),1] != 0.0))
 #        DominantErrors=GetDominantClassErrors(np.asarray(ValidationLabels), PredictedPixels)
 #        DominantErrorImage = np.int16(255*DominantErrors[:,0].reshape(ValidRaster.shape[0]-size, ValidRaster.shape[1]-size))
 
         cmapCHM = colors.ListedColormap(['black','red','lime','blue'])
-        plt.figure()
-        plt.subplot(2,2,1)
-        plt.imshow(np.int16(255*(ValidRasterIR)))
-        plt.title(ValidationSites.Abbrev[s]+'_'+str(ValidationSites.Month[s])+'_'+str(ValidationSites.Year[s]) + ' Bands (11,3,2)')
-        plt.subplot(2,2,2)
+        plt.figure(figsize=(10,5))
+        plt.subplot(1,3,1)
+        plt.imshow(ValidRasterIR)
+        plt.title(ValidationSites.Abbrev[s]+'_'+str(ValidationSites.Month[s])+'_'+str(ValidationSites.Year[s]) + ' Bands (11,4,3)')
+        plt.subplot(1,3,2)
         plt.imshow(PredictedClassImage)
         plt.title(' Fuzzy Class')
         class1_box = mpatches.Patch(color='red', label='Sediment')
         class2_box = mpatches.Patch(color='lime', label='Veg.')
         class3_box = mpatches.Patch(color='blue', label='Water')
         ax=plt.gca()
-        ax.legend(handles=[class1_box,class2_box,class3_box], bbox_to_anchor=(1, -0.2),prop={'size': 24})
+        #ax.legend(handles=[class1_box,class2_box,class3_box], bbox_to_anchor=(1, -0.2),prop={'size': 24})
         
-        ax.legend(handles=[class1_box,class2_box,class3_box])
-        plt.subplot(2,2,3)
+        #ax.legend(handles=[class1_box,class2_box,class3_box])
+        plt.subplot(1,3,3)
         plt.imshow(np.int16(UAVRasterRGB))
-        plt.xlabel('UAV Ground-Truth Data')
+        plt.title('UAV Ground-Truth Data')
+        class1_box = mpatches.Patch(color='red', label='Sediment')
+        class2_box = mpatches.Patch(color='lime', label='Veg.')
+        class3_box = mpatches.Patch(color='blue', label='Water')
+        ax=plt.gca()
+        ax.legend(handles=[class1_box,class2_box,class3_box])
 #        
 #        plt.subplot(2,2,2)
 #        plt.imshow(DominantErrorImage)
