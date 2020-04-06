@@ -44,29 +44,28 @@ import os
 #############################################################
 
 '''Folder Settgings'''
-MainData = 'EMPTY'  #main data output from UAV2SEN_MakeCrispTensor.py. no extensions, will be fleshed out below
-SiteList = 'EMPTY'#this has the lists of sites with name, month, year and 1s and 0s to identify training and validation sites
-DataFolder = 'EMPTY'  #location of processed tif files
-
+MainData = 'E:\\UAV2SEN\\MLdata\\FullData_4xnoise'  #main data output from UAV2SEN_MakeCrispTensor.py. no extensions, will be fleshed out below
+SiteList = 'E:\\UAV2SEN\\SiteList.csv'#this has the lists of sites with name, month, year and 1s and 0s to identify training and validation sites
+DataFolder = 'E:\\UAV2SEN\\FinalTif\\'  #location of processed tif files
 
 '''Model Features and Labels'''
 LabelSet = ['WaterMem', 'VegMem','SedMem' ]
-FeatureSet = ['B1','B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12'] # pick predictor bands from: ['B1','B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12']
+FeatureSet = ['B2','B3','B4','B8'] # pick predictor bands from: ['B1','B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12']
 
 '''CNN parameters'''
-TrainingEpochs = 50 #Use model tuning to adjust this and prevent overfitting
-Nfilters = 32
-size=5#size of the tensor tiles
+TrainingEpochs = 100 #Use model tuning to adjust this and prevent overfitting
+Nfilters = 256
+size=3#size of the tensor tiles
 KernelSize=3 # size of the convolution kernels
-LearningRate = 0.001
+LearningRate = 0.0005
 Chatty = 1 # set the verbosity of the model training. 
 NAF = 'relu' #NN activation function
 
 '''Validation Settings'''
-UAVvalid = False #if true use the UAV class data to validate.  If false, use desk-based polygons and ignore majority type
-MajType = 'RelMaj' #majority type to use in the display only, the F1 scores will be produced for all majority types
+UAVvalid = True #if true use the UAV class data to validate.  If false, use desk-based polygons and ignore majority type
+MajType = 'Pure' #majority type to use in the display only, the F1 scores will be produced for all majority types
 PureThresh = 0.95 #If MajType is Pure, you can adjust the threshold for a pure class here.
-ShowValidation=True
+ShowValidation=False
 
 #################################################################################
 '''Function definitions'''
@@ -259,7 +258,7 @@ Estimator.summary()
 ###############################################################################
 """Data Fitting"""
 
-X_train, X_test, y_train, y_test = train_test_split(TrainingTensor, TrainingLabels, test_size=0.0001, random_state=42)
+X_train, X_test, y_train, y_test = train_test_split(TrainingTensor, TrainingLabels, test_size=0.2, random_state=42)
 print('Fitting CNN Classifier on ' + str(len(X_train)) + ' pixels')
 Estimator.fit(X_train, y_train, batch_size=1000, epochs=TrainingEpochs, verbose=Chatty)#, class_weight=weights)
 
@@ -334,9 +333,9 @@ if ShowValidation:
 
         PredictedPixelsRaster = np.int16(ClassPredicted.reshape(ValidRaster.shape[0]-size, ValidRaster.shape[1]-size))
         PredictedClassImage=np.int16(np.zeros((PredictedPixelsRaster.shape[0], PredictedPixelsRaster.shape[1],3)))
-        PredictedClassImage[:,:,0]=100*(PredictedPixelsRaster==3)
-        PredictedClassImage[:,:,1]=100*(PredictedPixelsRaster==2)
-        PredictedClassImage[:,:,2]=100*(PredictedPixelsRaster==1)
+        PredictedClassImage[:,:,0]=255*(PredictedPixelsRaster==3)
+        PredictedClassImage[:,:,1]=255*(PredictedPixelsRaster==2)
+        PredictedClassImage[:,:,2]=255*(PredictedPixelsRaster==1)
 
 
 
