@@ -28,7 +28,7 @@ import seaborn as sns
 #import statsmodels.api as sm
 from skimage import io
 from skimage.transform import downscale_local_mean, resize
-import matplotlib
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
 import matplotlib.patches as mpatches
@@ -42,20 +42,19 @@ import os
 #############################################################
 
 '''Folder Settgings'''
-MainData = 'EMPTY'  #main data output from UAV2SEN_MakeCrispTensor.py. no extensions, will be fleshed out below
-SiteList = 'EMPTY'#this has the lists of sites with name, month, year and 1s and 0s to identify training and validation sites
-DataFolder = 'EMPTY'  #location of processed tif files
-ModelName = 'EMPTY'  #Name and location of the final model to be saved in DataFolder. Add .h5 extension
+MainData = 'E:\\UAV2SEN\\MLdata\\Fulldata_4xnoise'  #main data output from UAV2SEN_MakeCrispTensor.py. no extensions, will be fleshed out below
+SiteList = 'E:\\UAV2SEN\\SiteList.csv'#this has the lists of sites with name, month, year and 1s and 0s to identify training and validation sites
+DataFolder = 'E:\\UAV2SEN\\FinalTif\\'  #location of processed tif files
+ModelName = 'Fuzzy_exp_tests'  #Name and location of the final model to be saved in DataFolder. Add .h5 extension
 
 '''Model Features and Labels'''
-FeatureSet =  ['B1','B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12'] # pick predictor bands from: ['B1','B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12']
+FeatureSet = ['B1','B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12'] # pick predictor bands from: ['B1','B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12']
 LabelSet = ['WaterMem', 'VegMem','SedMem' ]
 
 '''CNN parameters'''
 TrainingEpochs = 100 #Use model tuning to adjust this and prevent overfitting
-Nfilters = 32
+Nfilters =64
 size=5#size of the tensor tiles
-KernelSize=3 # size of the convolution kernels. Caution becasue mis-setting this could cause bugs in the network definition.  Best keep at 3.
 LearningRate = 0.0005
 Chatty = 1 # set the verbosity of the model training. 
 NAF = 'tanh' #NN activation function
@@ -65,8 +64,14 @@ ModelTuning = False #Plot the history of the training losses.  Increase the Trai
 '''Validation Settings'''
 
 ShowValidation = False#if true fuzzy classified images of the validation sites will be displayed.  Warning: xpensive to compute.
-
-
+PublishHist = False#best quality historgams
+Ytop=6.5
+SaveName='E:\\UAV2SEN\\Results\\Experiments\\HistTest.png'
+OutDPI=600
+Fname='Arial'
+Fsize=10
+Fweight='bold'
+Lweight=1.5
 
 
 #################################################################################
@@ -199,41 +204,18 @@ inShape = TrainingTensor.shape[1:]
 
 
  	# create model
-if size==3: 
-    Estimator = Sequential()
-    Estimator.add(Conv2D(Nfilters,KernelSize, data_format='channels_last', input_shape=inShape, activation=NAF))
-    Estimator.add(Flatten())
-    Estimator.add(Dense(64, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
-    Estimator.add(BatchNormalization(axis=-1, momentum=0.99, epsilon=0.001, center=True, scale=True, beta_initializer='zeros', gamma_initializer='ones', moving_mean_initializer='zeros', moving_variance_initializer='ones', beta_regularizer=None, gamma_regularizer=None, beta_constraint=None, gamma_constraint=None))
-    Estimator.add(Dense(32, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
-    Estimator.add(Dense(16, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
-    Estimator.add(Dense(NClasses, kernel_initializer='normal', activation='linear'))    
+
+Estimator = Sequential()
+Estimator.add(Conv2D(Nfilters,size, data_format='channels_last', input_shape=inShape, activation=NAF))
+Estimator.add(Flatten())
+Estimator.add(Dense(64, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
+Estimator.add(BatchNormalization(axis=-1, momentum=0.99, epsilon=0.001, center=True, scale=True, beta_initializer='zeros', gamma_initializer='ones', moving_mean_initializer='zeros', moving_variance_initializer='ones', beta_regularizer=None, gamma_regularizer=None, beta_constraint=None, gamma_constraint=None))
+Estimator.add(Dense(32, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
+Estimator.add(Dense(16, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
+Estimator.add(Dense(NClasses, kernel_initializer='normal', activation='linear'))    
 
 
-elif size==5:
-    Estimator = Sequential()
-    Estimator.add(Conv2D(Nfilters,KernelSize, data_format='channels_last', input_shape=inShape, activation=NAF))
-    Estimator.add(Conv2D(Nfilters,KernelSize, activation=NAF))
-    Estimator.add(Flatten())
-    Estimator.add(Dense(64, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
-    Estimator.add(BatchNormalization(axis=-1, momentum=0.99, epsilon=0.001, center=True, scale=True, beta_initializer='zeros', gamma_initializer='ones', moving_mean_initializer='zeros', moving_variance_initializer='ones', beta_regularizer=None, gamma_regularizer=None, beta_constraint=None, gamma_constraint=None))
-    Estimator.add(Dense(32, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
-    Estimator.add(Dense(16, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
-    Estimator.add(Dense(NClasses, kernel_initializer='normal', activation='linear'))
-    
-elif size==7:
-    Estimator = Sequential()
-    Estimator.add(Conv2D(Nfilters,KernelSize, data_format='channels_last', input_shape=inShape, activation=NAF))
-    Estimator.add(Conv2D(Nfilters,KernelSize, activation=NAF))
-    Estimator.add(Conv2D(Nfilters,KernelSize, activation=NAF))
-    Estimator.add(Flatten())
-    Estimator.add(Dense(64, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
-    Estimator.add(BatchNormalization(axis=-1, momentum=0.99, epsilon=0.001, center=True, scale=True, beta_initializer='zeros', gamma_initializer='ones', moving_mean_initializer='zeros', moving_variance_initializer='ones', beta_regularizer=None, gamma_regularizer=None, beta_constraint=None, gamma_constraint=None))
-    Estimator.add(Dense(32, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
-    Estimator.add(Dense(16, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
-    Estimator.add(Dense(NClasses, kernel_initializer='normal', activation='linear'))
-else:
-    raise Exception('Invalid tile size, only 3,5 and 7 available')
+
 
 #Tune an optimiser
 Optim = optimizers.Adam(lr=LearningRate, beta_1=0.9, beta_2=0.999, decay=0.0, amsgrad=True)
@@ -258,8 +240,8 @@ if ModelTuning:
     val_loss_values = history_dict['val_loss']
     
     epochs = range(1, len(loss_values) + 1)
-    matplotlib.rc('xtick', labelsize=20) 
-    matplotlib.rc('ytick', labelsize=20) 
+    mpl.rc('xtick', labelsize=20) 
+    mpl.rc('ytick', labelsize=20) 
     plt.figure()
     plt.subplot(1,2,1)
     plt.plot(epochs, loss_values, 'ks', label = 'Training loss')
@@ -309,8 +291,8 @@ DominantErrorsDF = pd.DataFrame(D)
 
 RMSdom = np.sqrt(np.mean(DominantErrors[:,0]*DominantErrors[:,0]))
 RMSsubdom = np.sqrt(np.mean(DominantErrors[:,1]*DominantErrors[:,1]))
-QPAdom = np.sum(np.abs(DominantErrors[:,0]<0.25))/len(DominantErrors[:,0])
-QPAsubdom = np.sum(np.abs(DominantErrors[:,1]<0.25))/len(DominantErrors[:,1])
+QPAdom = np.sum(np.abs(DominantErrors[:,0])<0.25)/len(DominantErrors[:,0])
+QPAsubdom = np.sum(np.abs(DominantErrors[:,1])<0.25)/len(DominantErrors[:,1])
 
 print('20% test mean error for DOMINANT class= ', str(np.mean(DominantErrors[:,0])))
 print('20% test RMS error for DOMINANT class= ', str(RMSdom))
@@ -320,15 +302,37 @@ print('20% test RMS error for SUB-DOMINANT class= ', str(RMSsubdom))
 print('20% test QPA for the SUB-DOMINANT class= '+ str(QPAsubdom))
 
 print('\n')
-datbins=np.linspace(-1,1,500)
-plt.figure()
-plt.subplot(1,2,1)
-sns.distplot(DominantErrorsDF.Dominant_Error, axlabel='Dominant Class Errors', bins=datbins, color='k')
-plt.title('(Median, RMS, QPA) = '+' ('+str(int(100*np.median(DominantErrors[:,0])))+ ', '+str(int(100*RMSdom))+', '+str(int(100*QPAdom))+ ')')
-plt.ylabel('20% Test Frequency')
-plt.subplot(1,2,2)
-sns.distplot(DominantErrorsDF['Sub-Dominant_Error'], axlabel='Sub-Dominant Class Errors', bins=datbins, color='k')
-plt.title('(Median, RMS, QPA) = '+' ('+str(int(100*np.median(DominantErrors[:,1])))+ ', '+str(int(100*RMSsubdom))+', '+str(int(100*QPAsubdom))+ ')')
+
+if PublishHist:
+    mpl.rcParams['font.family'] = Fname
+    plt.rcParams['font.size'] = Fsize
+    plt.rcParams['axes.linewidth'] = Lweight
+    plt.rcParams['font.weight'] = Fweight
+    datbins=np.linspace(-1,1,40)
+    plt.figure()
+    plt.subplot(2,2,1)
+    sns.distplot(DominantErrorsDF.Dominant_Error,axlabel=' ', bins=datbins, color='k', kde=False)
+    #plt.ylim(0, Ytop)
+    plt.xticks((-1.0, -0.5, 0.0,0.5, 1.0))
+    plt.ylabel('Test Density', fontweight=Fweight)
+    plt.subplot(2,2,2)
+    sns.distplot(DominantErrorsDF['Sub-Dominant_Error'], axlabel=' ',bins=datbins, color='k', kde=False)
+    #plt.ylim(0, Ytop)
+    plt.xticks((-1.0, -0.5, 0.0,0.5, 1.0))
+
+
+
+else:
+    
+    datbins=np.linspace(-1,1,40)
+    plt.figure()
+    plt.subplot(1,2,1)
+    sns.distplot(DominantErrorsDF.Dominant_Error, axlabel='', bins=datbins, color='k', kde=False)
+    plt.title('(Median, RMS, QPA) = '+' ('+str(int(100*np.median(DominantErrors[:,0])))+ ', '+str(int(100*RMSdom))+', '+str(int(100*QPAdom))+ ')')
+    plt.ylabel('20% Test Frequency')
+    plt.subplot(1,2,2)
+    sns.distplot(DominantErrorsDF['Sub-Dominant_Error'], axlabel='', bins=datbins, color='k', kde=False)
+    plt.title('(Median, RMS, QPA) = '+' ('+str(int(100*np.median(DominantErrors[:,1])))+ ', '+str(int(100*RMSsubdom))+', '+str(int(100*QPAsubdom))+ ')')
 
 
 
@@ -342,8 +346,8 @@ DominantErrorsDF = pd.DataFrame(D)
 
 RMSdom = np.sqrt(np.mean(DominantErrors[:,0]*DominantErrors[:,0]))
 RMSsubdom = np.sqrt(np.mean(DominantErrors[:,1]*DominantErrors[:,1]))
-QPAdom = np.sum(np.abs(DominantErrors[:,0]<0.25))/len(DominantErrors[:,0])
-QPAsubdom = np.sum(np.abs(DominantErrors[:,1]<0.25))/len(DominantErrors[:,1])
+QPAdom = np.sum(np.abs(DominantErrors[:,0])<0.25)/len(DominantErrors[:,0])
+QPAsubdom = np.sum(np.abs(DominantErrors[:,1])<0.25)/len(DominantErrors[:,1])
 
 
 print('Validation mean error for DOMINANT class= ', str(np.mean(DominantErrors[:,0])))
@@ -354,15 +358,38 @@ print('Validation RMS error for SUB-DOMINANT class= ', str(RMSsubdom))
 print('Validation QPA for the SUB-DOMINANT class= '+ str(QPAsubdom))
 print('\n')
 
-datbins=np.linspace(-1,1,500)
-plt.figure()
-plt.subplot(1,2,1)
-sns.distplot(DominantErrorsDF.Dominant_Error, axlabel='Dominant Class Errors', bins=datbins, color='b')
-plt.title('(Median, RMS, QPA) = '+' ('+str(int(100*np.median(DominantErrors[:,0])))+ ', '+str(int(100*RMSdom))+', '+str(int(100*QPAdom))+ ')')
-plt.ylabel('Validation Frequency')
-plt.subplot(1,2,2)
-sns.distplot(DominantErrorsDF['Sub-Dominant_Error'], axlabel='Sub-Dominant Class Errors', bins=datbins, color='b')
-plt.title('(Median, RMS, QPA) = '+' ('+str(int(100*np.median(DominantErrors[:,1])))+ ', '+str(int(100*RMSsubdom))+', '+str(int(100*QPAsubdom))+ ')')
+
+if PublishHist:
+    mpl.rcParams['font.family'] = Fname
+    plt.rcParams['font.size'] = Fsize
+    plt.rcParams['axes.linewidth'] = Lweight
+    plt.rcParams['font.weight'] = Fweight
+    datbins=np.linspace(-1,1,40)
+    plt.subplot(2,2,3)
+    sns.distplot(DominantErrorsDF.Dominant_Error, bins=datbins, color='k', kde=False)
+    #plt.ylim(0, Ytop)
+    plt.ylabel('Validation Density', fontweight=Fweight)
+    plt.xlabel('Dominant Class Error', fontweight=Fweight)
+    plt.xticks((-1.0, -0.5, 0.0,0.5, 1.0))
+    plt.subplot(2,2,4)
+    sns.distplot(DominantErrorsDF['Sub-Dominant_Error'], bins=datbins, color='k', kde=False)
+    plt.xlabel('Sub-Dominant Class Error', fontweight=Fweight)
+    plt.xticks((-1.0, -0.5, 0.0,0.5, 1.0))
+    #plt.ylim(0, Ytop)
+    plt.savefig(SaveName, dpi=OutDPI, transparent=False, bbox_inches='tight')
+
+
+
+
+else:
+    plt.figure()
+    plt.subplot(1,2,1)
+    sns.distplot(DominantErrorsDF.Dominant_Error, axlabel='Dominant Class Errors', bins=datbins, color='b')
+    plt.title('(Median, RMS, QPA) = '+' ('+str(int(100*np.median(DominantErrors[:,0])))+ ', '+str(int(100*RMSdom))+', '+str(int(100*QPAdom))+ ')')
+    plt.ylabel('Validation Frequency')
+    plt.subplot(1,2,2)
+    sns.distplot(DominantErrorsDF['Sub-Dominant_Error'], axlabel='Sub-Dominant Class Errors', bins=datbins, color='b')
+    plt.title('(Median, RMS, QPA) = '+' ('+str(int(100*np.median(DominantErrors[:,1])))+ ', '+str(int(100*RMSsubdom))+', '+str(int(100*QPAsubdom))+ ')')
 
 
 '''Show the classified validation images'''
