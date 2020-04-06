@@ -26,15 +26,15 @@ import rasterio
 """Inputs"""
 #############################################################
 
-SiteList = 'E:\\SiteList.csv'#this has the lists of sites with name, month and year
-DatFolder = 'E:\\FinalTif\\' #location of above
+SiteList = 'EMPTY'#this has the lists of sites with name, month and year
+DatFolder = 'EMPTY' #location of above
 
 #tile size 
-size=5
+size=7
 
 
 #Output location
-Outfile = 'E:\\MLdata\\FullData_2x' #no extensions needed, added later
+Outfile = 'EMPTY' #no extensions needed, added later
 
 
 ###############################################################################
@@ -172,9 +172,9 @@ for s in range(len(SiteDF.Site)):
         
     dataspots = LabelDF.RelMajClass != -1 #finds whre valid data was extracted
     numel = np.sum(dataspots)
-    AugLabel = np.zeros((2*numel,7))
+    AugLabel = np.zeros((4*numel,7))
     AugLabelDF = pd.DataFrame(data=AugLabel, columns=['RelMajClass','MajClass','PureClass','PolyClass','Month','Year','Site'])
-    AugTensor = np.zeros((2*numel, size,size,Ti.shape[3]))
+    AugTensor = np.zeros((4*numel, size,size,Ti.shape[3]))
     
     
     #assemble valid data and a bit of data augmentation with 90 degree rotation and flips of the tensor
@@ -189,16 +189,16 @@ for s in range(len(SiteDF.Site)):
             AugTensor[E,:,:,:]=Irotated #+ noise
             AugLabelDF.iloc[E] = LabelDF.iloc[n]
             E+=1
-#            noise=0.001*np.random.random((1,size,size,12))
-#            Irotated = np.rot90(Irotated)
-#            AugTensor[E,:,:,:]=Irotated + noise
-#            AugLabelDF.iloc[E] = LabelDF.iloc[n]
-#            E+=1
-#            noise=0.001*np.random.random((1,size,size,12))
-#            Irotated = np.rot90(Irotated)
-#            AugTensor[E,:,:,:]=Irotated + noise
-#            AugLabelDF.iloc[E] = LabelDF.iloc[n]
-#            E+=1
+            noise=0.001*np.random.random((1,size,size,12))
+            Irotated = np.rot90(Irotated)
+            AugTensor[E,:,:,:]=Irotated + noise
+            AugLabelDF.iloc[E] = LabelDF.iloc[n]
+            E+=1
+            noise=0.001*np.random.random((1,size,size,12))
+            Irotated = np.rot90(Irotated)
+            AugTensor[E,:,:,:]=Irotated + noise
+            AugLabelDF.iloc[E] = LabelDF.iloc[n]
+            E+=1
     MasterLabelDF = pd.concat([MasterLabelDF, AugLabelDF])
     MasterTensor = np.concatenate((MasterTensor, AugTensor), axis=0)
 
@@ -242,9 +242,9 @@ for s in range(len(SiteDF.Site)):
         
     dataspots = LabelDF.PolyClass != 0 #finds where valid data was extracted
     numel = np.sum(dataspots)
-    AugLabel = np.zeros((2*numel,7))
+    AugLabel = np.zeros((4*numel,7))
     AugLabelDF = pd.DataFrame(data=AugLabel, columns=['RelMajClass','MajClass','PureClass','PolyClass','Month','Year','Site'])
-    AugTensor = np.zeros((2*numel, size,size,Ti.shape[3]))
+    AugTensor = np.zeros((4*numel, size,size,Ti.shape[3]))
     
     
     #assemble valid data and a bit of data augmentation with three 90 degree rotations
@@ -259,16 +259,16 @@ for s in range(len(SiteDF.Site)):
             AugTensor[E,:,:,:]=Irotated# + noise
             AugLabelDF.iloc[E] = LabelDF.iloc[n]
             E+=1
-#            noise=0.001*np.random.random((1,size,size,12))
-#            Irotated = np.rot90(Irotated)
-#            AugTensor[E,:,:,:]=Irotated + noise
-#            AugLabelDF.iloc[E] = LabelDF.iloc[n]
-#            E+=1
-#            noise=0.001*np.random.random((1,size,size,12))
-#            Irotated = np.rot90(Irotated)
-#            AugTensor[E,:,:,:]=Irotated + noise
-#            AugLabelDF.iloc[E] = LabelDF.iloc[n]
-#            E+=1
+            noise=0.001*np.random.random((1,size,size,12))
+            Irotated = np.rot90(Irotated)
+            AugTensor[E,:,:,:]=Irotated + noise
+            AugLabelDF.iloc[E] = LabelDF.iloc[n]
+            E+=1
+            noise=0.001*np.random.random((1,size,size,12))
+            Irotated = np.rot90(Irotated)
+            AugTensor[E,:,:,:]=Irotated + noise
+            AugLabelDF.iloc[E] = LabelDF.iloc[n]
+            E+=1
     MasterLabelDF = pd.concat([MasterLabelDF, AugLabelDF])
     MasterTensor = np.concatenate((MasterTensor, AugTensor), axis=0)       
         

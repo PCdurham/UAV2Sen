@@ -6,29 +6,30 @@ __contact__ = 'patrice.carbonneau@durham.ac.uk'
 __copyright__ = '(c) Patrice Carbonneau'
 __license__ = 'MIT'
 
+
 '''
 
-This script performs fuzzy classification of river corridor features with a CNN.  the script allows 
+This script performs crisp classification of river corridor features with a CNN.  the script allows 
 the user to tune, train, validate and save CNN models.  The required inputs must be produced with the
-UAV2SEN_MakeFuzzyTensor.py script.
+UAV2SEN_MakeCrispTensor.py script.
 
 '''
-
 ###############################################################################
 """ Libraries"""
+
 from tensorflow.keras import regularizers
 from tensorflow.keras import optimizers
 import numpy as np
 import pandas as pd
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense, BatchNormalization,Flatten, Conv2D
-
+from tensorflow.keras.layers import Dense, BatchNormalization
+from tensorflow.keras.utils import to_categorical
+from sklearn import metrics
 from sklearn.model_selection import train_test_split
-import seaborn as sns
-#import statsmodels.api as sm
-from skimage import io
+from sklearn.preprocessing import StandardScaler
 from skimage.transform import downscale_local_mean, resize
-import matplotlib as mpl
+from skimage import io
+import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
 import matplotlib.patches as mpatches
@@ -37,41 +38,37 @@ import os
 
 
 
-#############################################################
+##########################################################################################
 """User data input. Use the site template and list training and validation choices"""
-#############################################################
-
+#########################################################################################
 '''Folder Settgings'''
-MainData = 'E:\\UAV2SEN\\MLdata\\Fulldata_4xnoise'  #main data output from UAV2SEN_MakeCrispTensor.py. no extensions, will be fleshed out below
+MainData = 'E:\\UAV2SEN\\MLdata\\FullData_4xnoise'  #main data output from UAV2SEN_MakeCrispTensor.py. no extensions, will be fleshed out below
 SiteList = 'E:\\UAV2SEN\\SiteList.csv'#this has the lists of sites with name, month, year and 1s and 0s to identify training and validation sites
 DataFolder = 'E:\\UAV2SEN\\FinalTif\\'  #location of processed tif files
-ModelName = 'Fuzzy_exp_tests'  #Name and location of the final model to be saved in DataFolder. Add .h5 extension
+ModelName = 'TEST32'  #Name and location of the final model to be saved in DataFolder. Add .h5 extension
 
 '''Model Features and Labels'''
+UAVtrain = True #if true use the UAV class data to train the model, if false use desk-based data for training
+MajType= 'Pure' #Majority type. only used if UAVtrain or valid is true. The options are RelMaj (relative majority class), Maj (majority) and Pure (95% unanimous).
 FeatureSet = ['B1','B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12'] # pick predictor bands from: ['B1','B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12']
-LabelSet = ['WaterMem', 'VegMem','SedMem' ]
 
 '''CNN parameters'''
-TrainingEpochs = 100 #Use model tuning to adjust this and prevent overfitting
-Nfilters =64
+TrainingEpochs = 100#Use model tuning to adjust this and prevent overfitting
+Nfilters = 32
 size=5#size of the tensor tiles
+KernelSize=3 # size of the convolution kernels
 LearningRate = 0.0005
 Chatty = 1 # set the verbosity of the model training. 
-NAF = 'tanh' #NN activation function
+NAF = 'relu' #NN activation function
 ModelTuning = False #Plot the history of the training losses.  Increase the TrainingEpochs if doing this.
 
-
 '''Validation Settings'''
+UAVvalid = True #if true use the UAV class data to validate.  If false, use desk-based polygons
+ShowValidation = False #if true will show predicted class rasters for validation images from the site list
 
-ShowValidation = False#if true fuzzy classified images of the validation sites will be displayed.  Warning: xpensive to compute.
-PublishHist = False#best quality historgams
-Ytop=6.5
-SaveName='E:\\UAV2SEN\\Results\\Experiments\\HistTest.png'
-OutDPI=600
-Fname='Arial'
-Fsize=10
-Fweight='bold'
-Lweight=1.5
+
+
+
 
 
 #################################################################################
@@ -91,30 +88,21 @@ def slide_raster_to_tiles(im, size):
             B+=1
 
     return TileTensor
-
-def GetDominantClassErrors(Obs, Pred):
-    Dominant=np.zeros((len(Obs),2))
-    for s in range(len(Obs)):
-        order=np.argsort(Obs[s,:])#dominant class in ground truth
-        Dominant[s,0]=Pred[s,order[-1]]-Obs[s,order[-1]]
-        Dominant[s,1]=Pred[s,order[-2]]-Obs[s,order[-2]]
-    return Dominant
-        
-
-
-####################################################################################
-'''Check that the specified folders and files exist before processing starts'''
+######################################################################################
+    
+    '''Check that the specified folders and files exist before processing starts'''
 if not(os.path.isfile(MainData+'_fuzzy_'+str(size)+'_T.npy')):
     raise Exception('Main data file does not exist')
 elif not(os.path.isfile(SiteList)):
     raise Exception('Site list csv file does not exist')
 elif not(os.path.isdir(DataFolder)):
     raise Exception('Data folder with pre-processed data not defined')
-    
+
+
 
 '''Load the tensors and filter out the required training and validation data.'''
-TensorFileName = MainData+'_fuzzy_'+str(size)+'_T.npy'
-LabelFileName = MainData+'_fuzzy_'+str(size)+'_L.csv'
+TensorFileName = MainData+'_crisp_'+str(size)+'_T.npy'
+LabelFileName = MainData+'_crisp_'+str(size)+'_L.csv'
 
 SiteDF = pd.read_csv(SiteList)
 MasterTensor = np.load(TensorFileName)
@@ -128,8 +116,6 @@ for n in range(1,13):
         Valid[n-1]=1
         
 MasterTensor = np.compress(Valid, MasterTensor, axis=3)
-
-
 
 
 #Start the filter process to isolate training and validation data
@@ -152,7 +138,7 @@ for s in range(len(TrainingSites.Site)):
 TrainingDF = TrainingDF.loc[MasterValid]
 TrainingTensor=np.compress(MasterValid,TrainingTensor, axis=0)#will delete where valid is false
 
-MasterValid = (np.zeros(len(MasterLabelDF.index)))
+MasterValid = (np.zeros(len(MasterLabelDF.index)))==1
 for s in range(len(ValidationSites.Site)):
     Valid = (ValidationDF.Site == ValidationSites.Abbrev[s])&(ValidationDF.Year==ValidationSites.Year[s])&(ValidationDF.Month==ValidationSites.Month[s])
     MasterValid = MasterValid | Valid
@@ -160,34 +146,74 @@ for s in range(len(ValidationSites.Site)):
 ValidationDF = ValidationDF.loc[MasterValid]
 ValidationTensor = np.compress(MasterValid,ValidationTensor, axis=0)#will delete where valid is false 
 
+    
+MajType=MajType+'Class'
 
-#Set the labels
-TrainingLabels = TrainingDF[LabelSet]
-ValidationLabels = ValidationDF[LabelSet]
 
-#remove the 4x data augmentation in the validation data
-Data=np.asarray(range(0,len(ValidationLabels)))
-Valid=(Data%4)==0
-ValidationTensor = np.compress(Valid,ValidationTensor, axis=0)
-ValidationLabels=ValidationLabels[Valid]
+#select desk-based or UAV-based for training and validation, if using UAV data, select the majority type
+if UAVtrain & UAVvalid:
+    TrainLabels= TrainingDF[MajType]
+    ValidationLabels = ValidationDF[MajType]
+    TrainingTensor = np.compress(TrainLabels>0, TrainingTensor, axis=0)
+    ValidationTensor = np.compress(ValidationLabels>0,ValidationTensor, axis=0)
+    TrainLabels=TrainLabels.loc[TrainLabels>0]
+    ValidationLabels=ValidationLabels.loc[ValidationLabels>0]
+    
+   
+elif UAVtrain and ~(UAVvalid):
+    TrainLabels= TrainingDF[MajType]
+    ValidationLabels = ValidationDF.PolyClass
+    TrainingTensor = np.compress(TrainLabels>0, TrainingTensor, axis=0)
+    ValidationTensor = np.compress(ValidationLabels>0,ValidationTensor, axis=0)
+    TrainLabels=TrainLabels.loc[TrainLabels>0]
+    ValidationLabels=ValidationLabels.loc[ValidationLabels>0]
+    
+elif ~(UAVtrain) & UAVvalid:
+    TrainLabels= TrainingDF.PolyClass
+    ValidationLabels = ValidationDF[MajType]
+    TrainingTensor = np.compress(TrainLabels>0, TrainingTensor, axis=0)
+    ValidationTensor = np.compress(ValidationLabels>0,ValidationTensor, axis=0)
+    TrainLabels=TrainLabels.loc[TrainLabels>0]
+    ValidationLabels=ValidationLabels.loc[ValidationLabels>0]
+    
+#
+else:
+    TrainLabels= TrainingDF.PolyClass
+    ValidationLabels = ValidationDF.PolyClass
+    TrainingTensor = np.compress(TrainLabels>0, TrainingTensor, axis=0)
+    ValidationTensor = np.compress(ValidationLabels>0,ValidationTensor, axis=0)
+    TrainLabels=TrainLabels.loc[TrainLabels>0]
+    ValidationLabels=ValidationLabels.loc[ValidationLabels>0]
+    
+#Select the central pixel in each tensor tile and make a table for non-convolutional NN classification
+TrainingFeatures = np.squeeze(TrainingTensor[:,size//2,size//2,:])
+ValidationFeatures = np.squeeze(ValidationTensor[:,size//2, size//2,:]) 
     
 #check for empty dataframes and raise an error if found
 
 if (len(TrainingDF.index)==0):
-    raise Exception('There is an empty dataframe for TRAINING')
+    raise Exception('There is an empty dataframe for training')
     
 if (len(ValidationDF.index)==0):
-    raise Exception('There is an empty dataframe for VALIDATION')
+    raise Exception('There is an empty dataframe for validation')
     
 #Check that tensor lengths match label lengths
 
-if (len(TrainingLabels.index)) != TrainingTensor.shape[0]:
+if (len(TrainLabels.index)) != TrainingTensor.shape[0]:
     raise Exception('Sample number mismatch for TRAINING tensor and labels')
     
 if (len(ValidationLabels.index)) != ValidationTensor.shape[0]:
     raise Exception('Sample number mismatch for VALIDATION tensor and labels')
     
 
+
+        
+    
+'''Use a Standard scaler for NN classification'''
+SCAL = StandardScaler()
+SCAL.fit(TrainingFeatures)
+TrainF_scaled = SCAL.transform(TrainingFeatures)
+ValidF_scaled = SCAL.transform(ValidationFeatures)
  
 
 
@@ -196,24 +222,19 @@ if (len(ValidationLabels.index)) != ValidationTensor.shape[0]:
 
 ##############################################################################
 """Instantiate the Neural Network pixel-based classifier""" 
-#basic params
-Ndims = TrainingTensor.shape[3] # Feature Dimensions. 
-NClasses = len(LabelSet)  #The number of classes in the data.
-inShape = TrainingTensor.shape[1:]
-
+Ndims = TrainF_scaled.shape[1] # Feature Dimensions. 
+NClasses = len(np.unique(TrainLabels))  #The number of classes in the data. This MUST be the same as the classes used to retrain the model
 
 
  	# create model
-
+ 
 Estimator = Sequential()
-Estimator.add(Conv2D(Nfilters,size, data_format='channels_last', input_shape=inShape, activation=NAF))
-Estimator.add(Flatten())
-Estimator.add(Dense(64, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
+Estimator.add(Dense(128, kernel_regularizer= regularizers.l2(0.001),input_dim=Ndims, kernel_initializer='normal', activation=NAF))
+Estimator.add(Dense(64, kernel_regularizer= regularizers.l2(0.001),input_dim=Ndims, kernel_initializer='normal', activation=NAF))
 Estimator.add(BatchNormalization(axis=-1, momentum=0.99, epsilon=0.001, center=True, scale=True, beta_initializer='zeros', gamma_initializer='ones', moving_mean_initializer='zeros', moving_variance_initializer='ones', beta_regularizer=None, gamma_regularizer=None, beta_constraint=None, gamma_constraint=None))
 Estimator.add(Dense(32, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
 Estimator.add(Dense(16, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
-Estimator.add(Dense(NClasses, kernel_initializer='normal', activation='linear'))    
-
+Estimator.add(Dense(NClasses+1, kernel_initializer='normal', activation='softmax'))    
 
 
 
@@ -221,14 +242,14 @@ Estimator.add(Dense(NClasses, kernel_initializer='normal', activation='linear'))
 Optim = optimizers.Adam(lr=LearningRate, beta_1=0.9, beta_2=0.999, decay=0.0, amsgrad=True)
 
 # Compile model
-Estimator.compile(loss='mean_squared_error', optimizer=Optim, metrics = ['accuracy'])
+Estimator.compile(loss='categorical_crossentropy', optimizer=Optim, metrics = ['accuracy'])
 Estimator.summary()
   
 ###############################################################################
 """Data Splitting"""
-
-X_train, X_test, y_train, y_test = train_test_split(TrainingTensor, TrainingLabels, test_size=0.2, random_state=42)
-
+TrainLabels1Hot = to_categorical(TrainLabels)
+ValidationLabels1Hot = to_categorical(ValidationLabels)
+X_train, X_test, y_train, y_test = train_test_split(TrainF_scaled, TrainLabels1Hot, test_size=0.2, random_state=42)
 
 if ModelTuning:
     #Split the data for tuning. Use a double pass of train_test_split to shave off some data
@@ -240,8 +261,8 @@ if ModelTuning:
     val_loss_values = history_dict['val_loss']
     
     epochs = range(1, len(loss_values) + 1)
-    mpl.rc('xtick', labelsize=20) 
-    mpl.rc('ytick', labelsize=20) 
+    matplotlib.rc('xtick', labelsize=20) 
+    matplotlib.rc('ytick', labelsize=20) 
     plt.figure()
     plt.subplot(1,2,1)
     plt.plot(epochs, loss_values, 'ks', label = 'Training loss')
@@ -267,129 +288,32 @@ if ModelTuning:
     
     raise Exception("Tuning Finished, adjust parameters and re-train the model") # stop the code if still in tuning phase.
 
-
-'''Model Fitting'''
+"""Data Fitting"""
 print('Fitting CNN Classifier on ' + str(len(X_train)) + ' pixels')
 Estimator.fit(X_train, y_train, batch_size=1000, epochs=TrainingEpochs, verbose=Chatty)
 
-    
 
 
 '''Save model'''
-ModelName=os.path.join(DataFolder,ModelName+'.h5')
+ModelName=os.path.join(DataFolder,ModelName)
 Estimator.save(ModelName,save_format='h5')
-
-
-'''Validate the model'''
-#Test data
+    
+#Fit the predictor to test pixels
 PredictedPixels = Estimator.predict(X_test)
 
+# #Produce TTS classification reports 
+#y_test=np.argmax(y_test, axis=1)
+# PredictedPixels 
+report = metrics.classification_report(np.argmax(y_test, axis=1), np.argmax(PredictedPixels, axis=1), digits = 3)
+print('20% Test classification results for ')
+print(report)
+      
 
-DominantErrors=GetDominantClassErrors(np.asarray(y_test), PredictedPixels)
-D={'Dominant_Error':DominantErrors[:,0],'Sub-Dominant_Error':DominantErrors[:,1] }
-DominantErrorsDF = pd.DataFrame(D)
-
-RMSdom = np.sqrt(np.mean(DominantErrors[:,0]*DominantErrors[:,0]))
-RMSsubdom = np.sqrt(np.mean(DominantErrors[:,1]*DominantErrors[:,1]))
-QPAdom = np.sum(np.abs(DominantErrors[:,0])<0.25)/len(DominantErrors[:,0])
-QPAsubdom = np.sum(np.abs(DominantErrors[:,1])<0.25)/len(DominantErrors[:,1])
-
-print('20% test mean error for DOMINANT class= ', str(np.mean(DominantErrors[:,0])))
-print('20% test RMS error for DOMINANT class= ', str(RMSdom))
-print('20% test QPA for the DOMINANT class= '+ str(QPAdom))
-print('20% test mean error for SUB-DOMINANT class= ', str(np.mean(DominantErrors[:,1])))
-print('20% test RMS error for SUB-DOMINANT class= ', str(RMSsubdom))
-print('20% test QPA for the SUB-DOMINANT class= '+ str(QPAsubdom))
-
-print('\n')
-
-if PublishHist:
-    mpl.rcParams['font.family'] = Fname
-    plt.rcParams['font.size'] = Fsize
-    plt.rcParams['axes.linewidth'] = Lweight
-    plt.rcParams['font.weight'] = Fweight
-    datbins=np.linspace(-1,1,40)
-    plt.figure()
-    plt.subplot(2,2,1)
-    sns.distplot(DominantErrorsDF.Dominant_Error,axlabel=' ', bins=datbins, color='k', kde=False)
-    #plt.ylim(0, Ytop)
-    plt.xticks((-1.0, -0.5, 0.0,0.5, 1.0))
-    plt.ylabel('Test Density', fontweight=Fweight)
-    plt.subplot(2,2,2)
-    sns.distplot(DominantErrorsDF['Sub-Dominant_Error'], axlabel=' ',bins=datbins, color='k', kde=False)
-    #plt.ylim(0, Ytop)
-    plt.xticks((-1.0, -0.5, 0.0,0.5, 1.0))
-
-
-
-else:
-    
-    datbins=np.linspace(-1,1,40)
-    plt.figure()
-    plt.subplot(1,2,1)
-    sns.distplot(DominantErrorsDF.Dominant_Error, axlabel='', bins=datbins, color='k', kde=False)
-    plt.title('(Median, RMS, QPA) = '+' ('+str(int(100*np.median(DominantErrors[:,0])))+ ', '+str(int(100*RMSdom))+', '+str(int(100*QPAdom))+ ')')
-    plt.ylabel('20% Test Frequency')
-    plt.subplot(1,2,2)
-    sns.distplot(DominantErrorsDF['Sub-Dominant_Error'], axlabel='', bins=datbins, color='k', kde=False)
-    plt.title('(Median, RMS, QPA) = '+' ('+str(int(100*np.median(DominantErrors[:,1])))+ ', '+str(int(100*RMSsubdom))+', '+str(int(100*QPAsubdom))+ ')')
-
-
-
-#Validation data
-PredictedPixels = Estimator.predict(ValidationTensor)
-
-
-DominantErrors=GetDominantClassErrors(np.asarray(ValidationLabels), PredictedPixels)
-D={'Dominant_Error':DominantErrors[:,0],'Sub-Dominant_Error':DominantErrors[:,1] }
-DominantErrorsDF = pd.DataFrame(D)
-
-RMSdom = np.sqrt(np.mean(DominantErrors[:,0]*DominantErrors[:,0]))
-RMSsubdom = np.sqrt(np.mean(DominantErrors[:,1]*DominantErrors[:,1]))
-QPAdom = np.sum(np.abs(DominantErrors[:,0])<0.25)/len(DominantErrors[:,0])
-QPAsubdom = np.sum(np.abs(DominantErrors[:,1])<0.25)/len(DominantErrors[:,1])
-
-
-print('Validation mean error for DOMINANT class= ', str(np.mean(DominantErrors[:,0])))
-print('Validation RMS error for DOMINANT class= ', str(RMSdom))
-print('Validation QPA for the DOMINANT class= '+ str(QPAdom))
-print('Validation mean error for SUB-DOMINANT class= ', str(np.mean(DominantErrors[:,1])))
-print('Validation RMS error for SUB-DOMINANT class= ', str(RMSsubdom))
-print('Validation QPA for the SUB-DOMINANT class= '+ str(QPAsubdom))
-print('\n')
-
-
-if PublishHist:
-    mpl.rcParams['font.family'] = Fname
-    plt.rcParams['font.size'] = Fsize
-    plt.rcParams['axes.linewidth'] = Lweight
-    plt.rcParams['font.weight'] = Fweight
-    datbins=np.linspace(-1,1,40)
-    plt.subplot(2,2,3)
-    sns.distplot(DominantErrorsDF.Dominant_Error, bins=datbins, color='k', kde=False)
-    #plt.ylim(0, Ytop)
-    plt.ylabel('Validation Density', fontweight=Fweight)
-    plt.xlabel('Dominant Class Error', fontweight=Fweight)
-    plt.xticks((-1.0, -0.5, 0.0,0.5, 1.0))
-    plt.subplot(2,2,4)
-    sns.distplot(DominantErrorsDF['Sub-Dominant_Error'], bins=datbins, color='k', kde=False)
-    plt.xlabel('Sub-Dominant Class Error', fontweight=Fweight)
-    plt.xticks((-1.0, -0.5, 0.0,0.5, 1.0))
-    #plt.ylim(0, Ytop)
-    plt.savefig(SaveName, dpi=OutDPI, transparent=False, bbox_inches='tight')
-
-
-
-
-else:
-    plt.figure()
-    plt.subplot(1,2,1)
-    sns.distplot(DominantErrorsDF.Dominant_Error, axlabel='Dominant Class Errors', bins=datbins, color='b')
-    plt.title('(Median, RMS, QPA) = '+' ('+str(int(100*np.median(DominantErrors[:,0])))+ ', '+str(int(100*RMSdom))+', '+str(int(100*QPAdom))+ ')')
-    plt.ylabel('Validation Frequency')
-    plt.subplot(1,2,2)
-    sns.distplot(DominantErrorsDF['Sub-Dominant_Error'], axlabel='Sub-Dominant Class Errors', bins=datbins, color='b')
-    plt.title('(Median, RMS, QPA) = '+' ('+str(int(100*np.median(DominantErrors[:,1])))+ ', '+str(int(100*RMSsubdom))+', '+str(int(100*QPAsubdom))+ ')')
+# #Fit the predictor to the external validation site
+PredictedPixels = Estimator.predict(ValidF_scaled)
+report = metrics.classification_report(ValidationLabels, np.argmax(PredictedPixels, axis=1), digits = 3)
+print('Out-of-Sample validation results for ')
+print(report)
 
 
 '''Show the classified validation images'''
@@ -424,13 +348,15 @@ if ShowValidation:
                 Valid[n-1]=1
         
         ValidationTensor = np.compress(Valid, ValidationTensor, axis=3)
+        ValidationFeatures = np.squeeze(ValidationTensor[:,size//2, size//2,:])
+        ValidF_scaled = SCAL.transform(ValidationFeatures)
         #print(ValidTensor.shape)
-        PredictedPixels = Estimator.predict(ValidationTensor)
+        PredictedPixels = Estimator.predict(ValidF_scaled)
         
 
-        PredictedWaterImage = np.int16(255*PredictedPixels[:,0].reshape(ValidRaster.shape[0]-size, ValidRaster.shape[1]-size))
-        PredictedVegImage = np.int16(255*PredictedPixels[:,1].reshape(ValidRaster.shape[0]-size, ValidRaster.shape[1]-size))
-        PredictedSedImage = np.int16(255*PredictedPixels[:,2].reshape(ValidRaster.shape[0]-size, ValidRaster.shape[1]-size))
+        PredictedWaterImage = np.int16(255*PredictedPixels[:,1].reshape(ValidRaster.shape[0]-size, ValidRaster.shape[1]-size))
+        PredictedVegImage = np.int16(255*PredictedPixels[:,2].reshape(ValidRaster.shape[0]-size, ValidRaster.shape[1]-size))
+        PredictedSedImage = np.int16(255*PredictedPixels[:,3].reshape(ValidRaster.shape[0]-size, ValidRaster.shape[1]-size))
         PredictedClassImage=np.int16(np.zeros((PredictedWaterImage.shape[0], PredictedWaterImage.shape[1],4)))
         PredictedClassImage[:,:,0]=PredictedSedImage
         PredictedClassImage[:,:,1]=PredictedVegImage
@@ -470,7 +396,3 @@ if ShowValidation:
 #        plt.imshow(DominantErrorImage)
         
         
-        
-    
-
-

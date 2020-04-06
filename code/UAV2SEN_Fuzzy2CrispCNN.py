@@ -6,23 +6,35 @@ __contact__ = 'patrice.carbonneau@durham.ac.uk'
 __copyright__ = '(c) Patrice Carbonneau'
 __license__ = 'MIT'
 
+'''
+
+This script performs crisp classification of river corridor features with a fuzzy CNN.  the script allows 
+the user to use a fuzzy classifier's predictions to predict crisp classes according to 3 rules:
+    
+    - a relative majority where 1 class has a higher membershio than any other
+    - a majority where 1 class has more than 50% membership
+    - a (quasi) pure class where 1 class has more than 95% membership)
+   
+The required inputs must be produced with the UAV2SEN_MakeFuzzyTensor.py script.
+
+'''
+
 ###############################################################################
 """ Libraries"""
 from tensorflow.keras import regularizers
 from tensorflow.keras import optimizers
-from tensorflow.keras.utils import normalize
 import numpy as np
 import pandas as pd
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, BatchNormalization,Flatten, Conv2D
-from tensorflow.keras.wrappers.scikit_learn import KerasClassifier
-from tensorflow.keras.utils import to_categorical
 from sklearn import metrics
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
-from pickle import dump
-import seaborn as sns
-import statsmodels.api as sm
+import skimage.io as io
+import matplotlib
+import matplotlib.pyplot as plt
+import matplotlib.colors as colors
+import matplotlib.patches as mpatches
+import os
 
 
 
@@ -30,26 +42,30 @@ import statsmodels.api as sm
 #############################################################
 """User data input. Use the site template and list training and validation choices"""
 #############################################################
-#############################################################
+
+'''Folder Settgings'''
 MainData = 'E:\\UAV2SEN\\MLdata\\FullData_4xnoise'  #main data output from UAV2SEN_MakeCrispTensor.py. no extensions, will be fleshed out below
 SiteList = 'E:\\UAV2SEN\\SiteList.csv'#this has the lists of sites with name, month, year and 1s and 0s to identify training and validation sites
-ModelName = 'E:\\UAV2SEN\\MLdata\\CNNdebugged.h5'  #Name and location of the final model to be saved
-DatFolder = 'E:\\UAV2SEN\\FinalTif\\'  #location of processed tif files
-TrainingEpochs = 15 #Typically this can be reduced
-Nfilters = 64
-size=5#size of the tensor tiles
-KernelSize=3 # size of the convolution kernels. 
+DataFolder = 'E:\\UAV2SEN\\FinalTif\\'  #location of processed tif files
 
-UAVvalid = False #if true use the UAV class data to validate.  If false, use desk-based polygons and ignore majority type
-MajType = 'Pure' #majority type to use in crisp validation
-FeatureSet =  ['B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12'] # pick predictor bands from: ['B1','B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12']
+'''Model Features and Labels'''
 LabelSet = ['WaterMem', 'VegMem','SedMem' ]
-LearningRate = 0.001
+FeatureSet = ['B2','B3','B4','B8'] # pick predictor bands from: ['B1','B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12']
+
+'''CNN parameters'''
+TrainingEpochs = 100 #Use model tuning to adjust this and prevent overfitting
+Nfilters = 256
+size=3#size of the tensor tiles
+KernelSize=3 # size of the convolution kernels
+LearningRate = 0.0005
 Chatty = 1 # set the verbosity of the model training. 
 NAF = 'relu' #NN activation function
 
-DoHistory = False #Plot the history of the training losses
-ShowValidation=True
+'''Validation Settings'''
+UAVvalid = True #if true use the UAV class data to validate.  If false, use desk-based polygons and ignore majority type
+MajType = 'Pure' #majority type to use in the display only, the F1 scores will be produced for all majority types
+PureThresh = 0.95 #If MajType is Pure, you can adjust the threshold for a pure class here.
+ShowValidation=False
 
 #################################################################################
 '''Function definitions'''
@@ -71,7 +87,13 @@ def slide_raster_to_tiles(im, size):
 
 
 ####################################################################################
-    
+'''Check that the specified folders and files exist before processing starts'''
+if not(os.path.isfile(MainData+'_fuzzy_'+str(size)+'_T.npy')):
+    raise Exception('Main data file does not exist')
+elif not(os.path.isfile(SiteList)):
+    raise Exception('Site list csv file does not exist')
+elif not(os.path.isdir(DataFolder)):
+    raise Exception('Data folder with pre-processed data not defined')   
 
 '''Load the tensors and filter out the required training and validation data.'''
 TensorFileName = MainData+'_fuzzy_'+str(size)+'_T.npy'
@@ -236,7 +258,7 @@ Estimator.summary()
 ###############################################################################
 """Data Fitting"""
 
-X_train, X_test, y_train, y_test = train_test_split(TrainingTensor, TrainingLabels, test_size=0.0001, random_state=42)
+X_train, X_test, y_train, y_test = train_test_split(TrainingTensor, TrainingLabels, test_size=0.2, random_state=42)
 print('Fitting CNN Classifier on ' + str(len(X_train)) + ' pixels')
 Estimator.fit(X_train, y_train, batch_size=1000, epochs=TrainingEpochs, verbose=Chatty)#, class_weight=weights)
 
@@ -263,12 +285,88 @@ print(report)
 print('\n \n')
 
 ClassPredicted = 1+np.argmax(PredictedPixels, axis=1)
-ClassPredicted_pure = ClassPredicted[np.max(PredictedPixels, axis=1)>0.950]
-ClassTrue = Y[np.max(PredictedPixels, axis=1)>0.950]
+ClassPredicted_pure = ClassPredicted[np.max(PredictedPixels, axis=1)>PureThresh]
+ClassTrue = Y[np.max(PredictedPixels, axis=1)>PureThresh]
 report = metrics.classification_report(ClassTrue, ClassPredicted_pure, digits = 3)
 print('CRISP Validation results for pure class  ')
 print(report)
 print('\n \n')
+
+
+
+'''Show the classified validation images'''
+if ShowValidation:
+    for s in range(len(ValidationSites.index)):
+        UAVRaster = io.imread(DataFolder+ValidationSites.Abbrev[s]+'_'+str(ValidationSites.Month[s])+'_'+str(ValidationSites.Year[s])+'_UAVCLS.tif')
+        UAVRaster[UAVRaster>3] =0
+        UAVRaster[UAVRaster<1] =0
+        UAVRasterRGB = np.zeros((UAVRaster.shape[0], UAVRaster.shape[1], 3))
+        UAVRasterRGB[:,:,0]=255*(UAVRaster==3)
+        UAVRasterRGB[:,:,1]=255*(UAVRaster==2)
+        UAVRasterRGB[:,:,2]=255*(UAVRaster==1)
+        
+        ValidRasterName = DataFolder+ValidationSites.Abbrev[s]+'_'+str(ValidationSites.Month[s])+'_'+str(ValidationSites.Year[s])+'_S2.tif'
+        ValidRaster = io.imread(ValidRasterName)
+        ValidRasterIR = np.zeros((ValidRaster.shape[0], ValidRaster.shape[1],3))
+        ValidRasterIR[:,:,0] = ValidRaster[:,:,10]
+        ValidRasterIR[:,:,1] = ValidRaster[:,:,4]
+        ValidRasterIR[:,:,2] = ValidRaster[:,:,3]
+        ValidRasterIR = ValidRasterIR/np.max(np.unique(ValidRasterIR))
+        ValidTensor = slide_raster_to_tiles(ValidRaster, size)
+        Valid=np.zeros(12)
+        for n in range(1,13):
+            if ('B'+str(n)) in FeatureSet:
+                Valid[n-1]=1
+        
+        ValidTensorFinal = np.compress(Valid, ValidTensor, axis=3)
+        #print(ValidTensor.shape)
+        PredictedPixels = Estimator.predict(ValidTensorFinal)
+        
+        if MajType=='RelMajClass':
+            ClassPredicted = 1+np.argmax(PredictedPixels, axis=1)
+        elif MajType=='MajClass':
+            ClassPredicted = 1+np.argmax(PredictedPixels, axis=1)
+            ClassPredicted[np.max(PredictedPixels, axis=1)<0.50] = 0
+        elif MajType=='PureClass':
+            ClassPredicted = 1+np.argmax(PredictedPixels, axis=1)
+            ClassPredicted[np.max(PredictedPixels, axis=1)<PureThresh] =0
+
+        PredictedPixelsRaster = np.int16(ClassPredicted.reshape(ValidRaster.shape[0]-size, ValidRaster.shape[1]-size))
+        PredictedClassImage=np.int16(np.zeros((PredictedPixelsRaster.shape[0], PredictedPixelsRaster.shape[1],3)))
+        PredictedClassImage[:,:,0]=255*(PredictedPixelsRaster==3)
+        PredictedClassImage[:,:,1]=255*(PredictedPixelsRaster==2)
+        PredictedClassImage[:,:,2]=255*(PredictedPixelsRaster==1)
+
+
+
+        cmapCHM = colors.ListedColormap(['black','red','lime','blue'])
+        plt.figure()
+        plt.subplot(2,2,1)
+        plt.imshow(np.int16(255*(ValidRasterIR)))
+        plt.title(ValidationSites.Abbrev[s]+'_'+str(ValidationSites.Month[s])+'_'+str(ValidationSites.Year[s]) + ' Bands (11,3,2)')
+        plt.subplot(2,2,2)
+        plt.imshow(PredictedClassImage)
+        if MajType=='RelMajClass':
+            plt.title(' Relative Majority Class Pixels')
+            
+        elif MajType=='MajClass':
+            plt.title(' Majority Class Pixels')
+            
+        elif MajType=='PureClass':
+            plt.title(' Pure Class Pixels')
+           
+        
+        class1_box = mpatches.Patch(color='red', label='Sediment')
+        class2_box = mpatches.Patch(color='lime', label='Veg.')
+        class3_box = mpatches.Patch(color='blue', label='Water')
+        ax=plt.gca()
+        ax.legend(handles=[class1_box,class2_box,class3_box], bbox_to_anchor=(1, -0.2),prop={'size': 20})
+        
+        #ax.legend(handles=[class1_box,class2_box,class3_box])
+        plt.subplot(2,2,3)
+        plt.imshow(np.int16(UAVRasterRGB))
+        plt.xlabel('UAV Ground-Truth Data')
+        
 
 
 

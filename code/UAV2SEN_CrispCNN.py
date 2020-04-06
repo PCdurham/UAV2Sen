@@ -6,50 +6,68 @@ __contact__ = 'patrice.carbonneau@durham.ac.uk'
 __copyright__ = '(c) Patrice Carbonneau'
 __license__ = 'MIT'
 
+
+'''
+
+This script performs crisp classification of river corridor features with a CNN.  the script allows 
+the user to tune, train, validate and save CNN models.  The required inputs must be produced with the
+UAV2SEN_MakeCrispTensor.py script.
+
+'''
 ###############################################################################
 """ Libraries"""
-import tensorflow as tf
+
 from tensorflow.keras import regularizers
 from tensorflow.keras import optimizers
-from tensorflow.keras.utils import normalize
 import numpy as np
 import pandas as pd
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, BatchNormalization,Flatten, Conv2D
-from tensorflow.keras.wrappers.scikit_learn import KerasClassifier
 from tensorflow.keras.utils import to_categorical
 from sklearn import metrics
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
 from skimage import io
+from skimage.transform import downscale_local_mean, resize
+import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
 import matplotlib.patches as mpatches
+import os
 
 
 
 
-#############################################################
+##########################################################################################
 """User data input. Use the site template and list training and validation choices"""
-#############################################################
+#########################################################################################
+'''Folder Settgings'''
 MainData = 'E:\\UAV2SEN\\MLdata\\FullData_4xnoise'  #main data output from UAV2SEN_MakeCrispTensor.py. no extensions, will be fleshed out below
 SiteList = 'E:\\UAV2SEN\\SiteList.csv'#this has the lists of sites with name, month, year and 1s and 0s to identify training and validation sites
-DatFolder = 'E:\\UAV2SEN\\FinalTif\\'  #location of above
-TrainingEpochs = 15 #Typically this can be reduced
-Nfilters = 64
-UAVtrain = True #if true use the UAV class data to train the model, if false use desk-based
-UAVvalid = True #if true use the UAV class data to validate.  If false, use desk-based polygons
+DataFolder = 'E:\\UAV2SEN\\FinalTif\\'  #location of processed tif files
+ModelName = 'Crisp_AllBands_5_All2018'  #Name and location of the final model to be saved in DataFolder. Add .h5 extension
+
+'''Model Features and Labels'''
+UAVtrain = True #if true use the UAV class data to train the model, if false use desk-based data for training
+MajType= 'Pure' #Majority type. only used if UAVtrain or valid is true. The options are RelMaj (relative majority class), Maj (majority) and Pure (95% unanimous).
+FeatureSet = ['B2','B3','B4','B8'] # pick predictor bands from: ['B1','B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12']
+
+'''CNN parameters'''
+TrainingEpochs = 100#Use model tuning to adjust this and prevent overfitting
+Nfilters = 8
 size=5#size of the tensor tiles
 KernelSize=3 # size of the convolution kernels
-MajType= 'Pure' #Majority type. only used if UAVtrain or valid is true. The options are RelMaj (relative majority class), Maj (majority) and Pure (95% unanimous).
-ShowValidation = True #if true will show predicted class rasters for validation images from the site list
-FeatureSet = ['B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12'] # pick predictor bands from: ['B1','B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12']
-
-LearningRate = 0.001
+LearningRate = 0.0005
 Chatty = 1 # set the verbosity of the model training. 
 NAF = 'relu' #NN activation function
+ModelTuning = False #Plot the history of the training losses.  Increase the TrainingEpochs if doing this.
 
-DoHistory = False #Plot the history of the training losses
+'''Validation Settings'''
+UAVvalid = True #if true use the UAV class data to validate.  If false, use desk-based polygons
+ShowValidation = False #if true will show predicted class rasters for validation images from the site list
+
+
+
+
 
 
 #################################################################################
@@ -69,7 +87,15 @@ def slide_raster_to_tiles(im, size):
             B+=1
 
     return TileTensor
-
+######################################################################################
+    
+    '''Check that the specified folders and files exist before processing starts'''
+if not(os.path.isfile(MainData+'_fuzzy_'+str(size)+'_T.npy')):
+    raise Exception('Main data file does not exist')
+elif not(os.path.isfile(SiteList)):
+    raise Exception('Site list csv file does not exist')
+elif not(os.path.isdir(DataFolder)):
+    raise Exception('Data folder with pre-processed data not defined')
 
 
 
@@ -187,20 +213,16 @@ if (len(ValidationLabels.index)) != ValidationTensor.shape[0]:
 #TrainingTensor = normalize(TrainingTensor)
 #ValidationTensor = normalize(ValidationTensor)
  
-Ndims = TrainingTensor.shape[3] # Feature Dimensions. 
-NClasses = len(np.unique(TrainLabels))  #The number of classes in the data. This MUST be the same as the classes used to retrain the model
-inShape = TrainingTensor.shape[1:]
+
 
 
 
 
 ##############################################################################
 """Instantiate the Neural Network pixel-based classifier""" 
-#EstimatorRF = RFC(n_estimators = 150, n_jobs = 8, verbose = Chatty) #adjust this to your processors
-   
-
-
-# define the very deep model with L2 regularization and dropout
+Ndims = TrainingTensor.shape[3] # Feature Dimensions. 
+NClasses = len(np.unique(TrainLabels))  #The number of classes in the data. This MUST be the same as the classes used to retrain the model
+inShape = TrainingTensor.shape[1:]
 
  	# create model
 if size==3: 
@@ -246,13 +268,57 @@ Estimator.compile(loss='categorical_crossentropy', optimizer=Optim, metrics = ['
 Estimator.summary()
   
 ###############################################################################
-"""Data Fitting"""
+"""Data Splitting"""
 TrainLabels1Hot = to_categorical(TrainLabels)
 ValidationLabels1Hot = to_categorical(ValidationLabels)
 X_train, X_test, y_train, y_test = train_test_split(TrainingTensor, TrainLabels1Hot, test_size=0.2, random_state=42)
+
+if ModelTuning:
+    #Split the data for tuning. Use a double pass of train_test_split to shave off some data
+   
+    history = Estimator.fit(X_train, y_train, epochs = TrainingEpochs, batch_size = 1000, validation_data = (X_test, y_test))
+    #Plot the test results
+    history_dict = history.history
+    loss_values = history_dict['loss']
+    val_loss_values = history_dict['val_loss']
+    
+    epochs = range(1, len(loss_values) + 1)
+    matplotlib.rc('xtick', labelsize=20) 
+    matplotlib.rc('ytick', labelsize=20) 
+    plt.figure()
+    plt.subplot(1,2,1)
+    plt.plot(epochs, loss_values, 'ks', label = 'Training loss')
+    plt.plot(epochs,val_loss_values, 'k:', label = 'Validation loss')
+    #plt.title('Training and Validation Loss')
+    plt.xlabel('Epochs')
+    plt.ylabel('Loss')
+    plt.legend()
+    
+    acc_values = history_dict['accuracy']
+    val_acc_values = history_dict['val_accuracy']
+    plt.subplot(1,2,2)
+    plt.plot(epochs, acc_values, 'ko', label = 'Training accuracy')
+    plt.plot(epochs, val_acc_values, 'k', label = 'Validation accuracy')
+    #plt.title('Training and Validation Accuracy')
+    plt.xlabel('Epochs')
+    plt.ylabel('Accuracy')
+    plt.legend()
+    plt.rcParams.update({'font.size': 22})
+    plt.rcParams.update({'font.weight': 'bold'}) 
+    plt.show()
+
+    
+    raise Exception("Tuning Finished, adjust parameters and re-train the model") # stop the code if still in tuning phase.
+
+"""Data Fitting"""
 print('Fitting CNN Classifier on ' + str(len(X_train)) + ' pixels')
-Estimator.fit(X_train, y_train, batch_size=1000, epochs=TrainingEpochs, verbose=Chatty)#, class_weight=weights)
-#EstimatorRF.fit(X_train, y_train)
+Estimator.fit(X_train, y_train, batch_size=1000, epochs=TrainingEpochs, verbose=Chatty)
+
+
+
+'''Save model'''
+ModelName=os.path.join(DataFolder,ModelName)
+Estimator.save(ModelName,save_format='h5')
     
 #Fit the predictor to test pixels
 PredictedPixels = Estimator.predict(X_test)
@@ -275,21 +341,24 @@ print(report)
 '''Show the classified validation images'''
 if ShowValidation:
     for s in range(len(ValidationSites.index)):
-        UAVRaster = io.imread(DatFolder+ValidationSites.Abbrev[s]+'_'+str(ValidationSites.Month[s])+'_'+str(ValidationSites.Year[s])+'_UAVCLS.tif')
+        UAVRaster = io.imread(DataFolder+'Cropped_'+ValidationSites.Abbrev[s]+'_'+str(ValidationSites.Month[s])+'_'+str(ValidationSites.Year[s])+'_UAVCLS.tif')
         UAVRaster[UAVRaster>3] =0
         UAVRaster[UAVRaster<1] =0
-        UAVRasterRGB = np.zeros((UAVRaster.shape[0], UAVRaster.shape[1], 3))
+        
+        UAVRasterRGB = np.zeros((UAVRaster.shape[0], UAVRaster.shape[1], 4))
         UAVRasterRGB[:,:,0]=255*(UAVRaster==3)
         UAVRasterRGB[:,:,1]=255*(UAVRaster==2)
         UAVRasterRGB[:,:,2]=255*(UAVRaster==1)
-        
-        ValidRasterName = DatFolder+ValidationSites.Abbrev[s]+'_'+str(ValidationSites.Month[s])+'_'+str(ValidationSites.Year[s])+'_S2.tif'
+        UAVRasterRGB[:,:,3] = 255*np.float32(UAVRaster != 0.0)
+        UAVRasterRGB= downscale_local_mean(UAVRasterRGB, (10,10,1))
+        ValidRasterName = DataFolder+'Cropped_'+ValidationSites.Abbrev[s]+'_'+str(ValidationSites.Month[s])+'_'+str(ValidationSites.Year[s])+'_S2.tif'
         ValidRaster = io.imread(ValidRasterName)
-        ValidRasterIR = np.zeros((ValidRaster.shape[0], ValidRaster.shape[1],3))
-        ValidRasterIR[:,:,0] = ValidRaster[:,:,10]
-        ValidRasterIR[:,:,1] = ValidRaster[:,:,4]
-        ValidRasterIR[:,:,2] = ValidRaster[:,:,3]
-        ValidRasterIR = ValidRasterIR/np.max(np.unique(ValidRasterIR))
+        ValidRasterIR = np.uint8(np.zeros((ValidRaster.shape[0], ValidRaster.shape[1],4)))
+        stretch=2
+        ValidRasterIR[:,:,0] = np.int16(stretch*255*ValidRaster[:,:,10])
+        ValidRasterIR[:,:,1] = np.int16(stretch*255*ValidRaster[:,:,5])
+        ValidRasterIR[:,:,2] = np.int16(stretch*255*ValidRaster[:,:,4])
+        ValidRasterIR[:,:,3]= 255*np.int16((ValidRasterIR[:,:,0] != 0.0)&(ValidRasterIR[:,:,1] != 0.0))
         ValidTensor = slide_raster_to_tiles(ValidRaster, size)
         Valid=np.zeros(12)
         for n in range(1,13):
@@ -299,14 +368,24 @@ if ShowValidation:
         ValidTensor = np.compress(Valid, ValidTensor, axis=3)
         #print(ValidTensor.shape)
         PredictedPixels = Estimator.predict(ValidTensor)
-        PredictedPixels =np.argmax(PredictedPixels, axis=1)
-        
-
-        PredictedPixels = np.int16(PredictedPixels.reshape(ValidRaster.shape[0]-size, ValidRaster.shape[1]-size))
-        PredictedClassImage=np.int16(np.zeros((PredictedPixels.shape[0], PredictedPixels.shape[1],3)))
-        PredictedClassImage[:,:,0]=255*(PredictedPixels==3)
-        PredictedClassImage[:,:,1]=255*(PredictedPixels==2)
-        PredictedClassImage[:,:,2]=255*(PredictedPixels==1)
+#        PredictedPixels =np.argmax(PredictedPixels, axis=1)
+#        
+#
+#        PredictedPixels = np.int16(PredictedPixels.reshape(ValidRaster.shape[0]-size, ValidRaster.shape[1]-size))
+#        PredictedClassImage=np.int16(np.zeros((PredictedPixels.shape[0], PredictedPixels.shape[1],3)))
+#        PredictedClassImage[:,:,0]=255*(PredictedPixels==3)
+#        PredictedClassImage[:,:,1]=255*(PredictedPixels==2)
+#        PredictedClassImage[:,:,2]=255*(PredictedPixels==1)
+        PredictedWaterImage = np.int16(255*PredictedPixels[:,1].reshape(ValidRaster.shape[0]-size, ValidRaster.shape[1]-size))
+        PredictedVegImage = np.int16(255*PredictedPixels[:,2].reshape(ValidRaster.shape[0]-size, ValidRaster.shape[1]-size))
+        PredictedSedImage = np.int16(255*PredictedPixels[:,3].reshape(ValidRaster.shape[0]-size, ValidRaster.shape[1]-size))
+        PredictedClassImage=np.int16(np.zeros((PredictedWaterImage.shape[0], PredictedWaterImage.shape[1],4)))
+        PredictedClassImage[:,:,0]=PredictedSedImage
+        PredictedClassImage[:,:,1]=PredictedVegImage
+        PredictedClassImage[:,:,2]=PredictedWaterImage
+        mask = 255*np.int16((ValidRasterIR[:,:,0] != 0.0)&(ValidRasterIR[:,:,1] != 0.0))
+        mask = np.int16(resize(mask, (PredictedClassImage.shape[0], PredictedClassImage.shape[1]), preserve_range=True))
+        PredictedClassImage[:,:,3]=mask
 
         cmapCHM = colors.ListedColormap(['black','red','lime','blue'])
         plt.figure()
@@ -315,12 +394,12 @@ if ShowValidation:
         plt.title(ValidationSites.Abbrev[s]+'_'+str(ValidationSites.Month[s])+'_'+str(ValidationSites.Year[s]) + ' Bands (11,3,2)')
         plt.subplot(2,2,2)
         plt.imshow(PredictedClassImage)
-        plt.title(ValidationSites.Abbrev[s]+'_'+str(ValidationSites.Month[s])+'_'+str(ValidationSites.Year[s]) + ' Crisp Class')
+        plt.title(' Crisp Class')
         class1_box = mpatches.Patch(color='red', label='Sediment')
         class2_box = mpatches.Patch(color='lime', label='Veg.')
         class3_box = mpatches.Patch(color='blue', label='Water')
         ax=plt.gca()
-        ax.legend(handles=[class1_box,class2_box,class3_box], bbox_to_anchor=(1, -0.2),prop={'size': 30})
+        ax.legend(handles=[class1_box,class2_box,class3_box], bbox_to_anchor=(1, -0.2),prop={'size': 20})
         
         #ax.legend(handles=[class1_box,class2_box,class3_box])
         plt.subplot(2,2,3)
