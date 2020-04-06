@@ -27,6 +27,7 @@ from tensorflow.keras.utils import to_categorical
 from sklearn import metrics
 from sklearn.model_selection import train_test_split
 from skimage import io
+from skimage.transform import downscale_local_mean, resize
 import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
@@ -40,29 +41,29 @@ import os
 """User data input. Use the site template and list training and validation choices"""
 #########################################################################################
 '''Folder Settgings'''
-MainData = 'EMPTY'  #main data output from UAV2SEN_MakeCrispTensor.py. no extensions, will be fleshed out below
-SiteList = 'EMPTY'#this has the lists of sites with name, month, year and 1s and 0s to identify training and validation sites
-DataFolder = 'EMPTY'  #location of processed tif files
-ModelName = 'EMPTY'  #Name and location of the final model to be saved in DataFolder. Add .h5 extension
+MainData = 'E:\\UAV2SEN\\MLdata\\FullData_4xnoise'  #main data output from UAV2SEN_MakeCrispTensor.py. no extensions, will be fleshed out below
+SiteList = 'E:\\UAV2SEN\\SiteList.csv'#this has the lists of sites with name, month, year and 1s and 0s to identify training and validation sites
+DataFolder = 'E:\\UAV2SEN\\FinalTif\\'  #location of processed tif files
+ModelName = 'Crisp_AllBands_5_All2018'  #Name and location of the final model to be saved in DataFolder. Add .h5 extension
 
 '''Model Features and Labels'''
 UAVtrain = True #if true use the UAV class data to train the model, if false use desk-based data for training
 MajType= 'Pure' #Majority type. only used if UAVtrain or valid is true. The options are RelMaj (relative majority class), Maj (majority) and Pure (95% unanimous).
-FeatureSet = ['B1','B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12'] # pick predictor bands from: ['B1','B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12']
+FeatureSet = ['B2','B3','B4','B8'] # pick predictor bands from: ['B1','B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12']
 
 '''CNN parameters'''
-TrainingEpochs = 15 #Use model tuning to adjust this and prevent overfitting
-Nfilters = 64
+TrainingEpochs = 100#Use model tuning to adjust this and prevent overfitting
+Nfilters = 8
 size=5#size of the tensor tiles
 KernelSize=3 # size of the convolution kernels
-LearningRate = 0.001
+LearningRate = 0.0005
 Chatty = 1 # set the verbosity of the model training. 
 NAF = 'relu' #NN activation function
 ModelTuning = False #Plot the history of the training losses.  Increase the TrainingEpochs if doing this.
 
 '''Validation Settings'''
-UAVvalid = False #if true use the UAV class data to validate.  If false, use desk-based polygons
-ShowValidation = True #if true will show predicted class rasters for validation images from the site list
+UAVvalid = True #if true use the UAV class data to validate.  If false, use desk-based polygons
+ShowValidation = False #if true will show predicted class rasters for validation images from the site list
 
 
 
@@ -340,21 +341,24 @@ print(report)
 '''Show the classified validation images'''
 if ShowValidation:
     for s in range(len(ValidationSites.index)):
-        UAVRaster = io.imread(DataFolder+ValidationSites.Abbrev[s]+'_'+str(ValidationSites.Month[s])+'_'+str(ValidationSites.Year[s])+'_UAVCLS.tif')
+        UAVRaster = io.imread(DataFolder+'Cropped_'+ValidationSites.Abbrev[s]+'_'+str(ValidationSites.Month[s])+'_'+str(ValidationSites.Year[s])+'_UAVCLS.tif')
         UAVRaster[UAVRaster>3] =0
         UAVRaster[UAVRaster<1] =0
-        UAVRasterRGB = np.zeros((UAVRaster.shape[0], UAVRaster.shape[1], 3))
+        
+        UAVRasterRGB = np.zeros((UAVRaster.shape[0], UAVRaster.shape[1], 4))
         UAVRasterRGB[:,:,0]=255*(UAVRaster==3)
         UAVRasterRGB[:,:,1]=255*(UAVRaster==2)
         UAVRasterRGB[:,:,2]=255*(UAVRaster==1)
-        
-        ValidRasterName = DataFolder+ValidationSites.Abbrev[s]+'_'+str(ValidationSites.Month[s])+'_'+str(ValidationSites.Year[s])+'_S2.tif'
+        UAVRasterRGB[:,:,3] = 255*np.float32(UAVRaster != 0.0)
+        UAVRasterRGB= downscale_local_mean(UAVRasterRGB, (10,10,1))
+        ValidRasterName = DataFolder+'Cropped_'+ValidationSites.Abbrev[s]+'_'+str(ValidationSites.Month[s])+'_'+str(ValidationSites.Year[s])+'_S2.tif'
         ValidRaster = io.imread(ValidRasterName)
-        ValidRasterIR = np.zeros((ValidRaster.shape[0], ValidRaster.shape[1],3))
-        ValidRasterIR[:,:,0] = ValidRaster[:,:,10]
-        ValidRasterIR[:,:,1] = ValidRaster[:,:,4]
-        ValidRasterIR[:,:,2] = ValidRaster[:,:,3]
-        ValidRasterIR = ValidRasterIR/np.max(np.unique(ValidRasterIR))
+        ValidRasterIR = np.uint8(np.zeros((ValidRaster.shape[0], ValidRaster.shape[1],4)))
+        stretch=2
+        ValidRasterIR[:,:,0] = np.int16(stretch*255*ValidRaster[:,:,10])
+        ValidRasterIR[:,:,1] = np.int16(stretch*255*ValidRaster[:,:,5])
+        ValidRasterIR[:,:,2] = np.int16(stretch*255*ValidRaster[:,:,4])
+        ValidRasterIR[:,:,3]= 255*np.int16((ValidRasterIR[:,:,0] != 0.0)&(ValidRasterIR[:,:,1] != 0.0))
         ValidTensor = slide_raster_to_tiles(ValidRaster, size)
         Valid=np.zeros(12)
         for n in range(1,13):
@@ -364,14 +368,24 @@ if ShowValidation:
         ValidTensor = np.compress(Valid, ValidTensor, axis=3)
         #print(ValidTensor.shape)
         PredictedPixels = Estimator.predict(ValidTensor)
-        PredictedPixels =np.argmax(PredictedPixels, axis=1)
-        
-
-        PredictedPixels = np.int16(PredictedPixels.reshape(ValidRaster.shape[0]-size, ValidRaster.shape[1]-size))
-        PredictedClassImage=np.int16(np.zeros((PredictedPixels.shape[0], PredictedPixels.shape[1],3)))
-        PredictedClassImage[:,:,0]=100*(PredictedPixels==3)
-        PredictedClassImage[:,:,1]=100*(PredictedPixels==2)
-        PredictedClassImage[:,:,2]=100*(PredictedPixels==1)
+#        PredictedPixels =np.argmax(PredictedPixels, axis=1)
+#        
+#
+#        PredictedPixels = np.int16(PredictedPixels.reshape(ValidRaster.shape[0]-size, ValidRaster.shape[1]-size))
+#        PredictedClassImage=np.int16(np.zeros((PredictedPixels.shape[0], PredictedPixels.shape[1],3)))
+#        PredictedClassImage[:,:,0]=255*(PredictedPixels==3)
+#        PredictedClassImage[:,:,1]=255*(PredictedPixels==2)
+#        PredictedClassImage[:,:,2]=255*(PredictedPixels==1)
+        PredictedWaterImage = np.int16(255*PredictedPixels[:,1].reshape(ValidRaster.shape[0]-size, ValidRaster.shape[1]-size))
+        PredictedVegImage = np.int16(255*PredictedPixels[:,2].reshape(ValidRaster.shape[0]-size, ValidRaster.shape[1]-size))
+        PredictedSedImage = np.int16(255*PredictedPixels[:,3].reshape(ValidRaster.shape[0]-size, ValidRaster.shape[1]-size))
+        PredictedClassImage=np.int16(np.zeros((PredictedWaterImage.shape[0], PredictedWaterImage.shape[1],4)))
+        PredictedClassImage[:,:,0]=PredictedSedImage
+        PredictedClassImage[:,:,1]=PredictedVegImage
+        PredictedClassImage[:,:,2]=PredictedWaterImage
+        mask = 255*np.int16((ValidRasterIR[:,:,0] != 0.0)&(ValidRasterIR[:,:,1] != 0.0))
+        mask = np.int16(resize(mask, (PredictedClassImage.shape[0], PredictedClassImage.shape[1]), preserve_range=True))
+        PredictedClassImage[:,:,3]=mask
 
         cmapCHM = colors.ListedColormap(['black','red','lime','blue'])
         plt.figure()
