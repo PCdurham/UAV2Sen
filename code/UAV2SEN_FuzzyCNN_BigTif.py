@@ -33,13 +33,13 @@ from tensorflow.keras.models import load_model
 ###############################################################################
 '''User Inputs'''
 #Pre-Trained CNN with full path
-ModelName='EMPTY'
+ModelName='E:\\UAV2SEN\\FinalTif\\Fuzzy_exp1'
 size=5 #tile sized used to train the model
 FeatureSet =  ['B1','B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12'] # pick predictor bands from: ['B1','B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12']
 
 #Image to classify
-ImageName = 'EMPTY' #do not add the tif extension
-ImageLocation = 'EMPTY'#add slashes at the end
+ImageName = 'Po_Sept2018' #do not add the tif extension
+ImageLocation = 'E:\\UAV2SEN\\SuperRes\\'#add slashes at the end
 ImageUTM = 32 #Give UTM zone. Assumes WGS84 datum
 North = True #set to false if wanting UTM for southern hemisphere
 SizeThresh = 500000 #This sets the threshold to trigger slower but OoM-error free row-by-row processing.  Increase or Decrease depending on your computer.
