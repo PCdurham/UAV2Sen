@@ -54,8 +54,8 @@ FeatureSet = ['B1','B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12'] # 
 
 '''CNN parameters'''
 TrainingEpochs = 100#Use model tuning to adjust this and prevent overfitting
-Nfilters = 32
-size=5#size of the tensor tiles
+Nfilters = 4
+size=3#size of the tensor tiles
 KernelSize=3 # size of the convolution kernels
 LearningRate = 0.0005
 Chatty = 1 # set the verbosity of the model training. 
@@ -229,7 +229,6 @@ NClasses = len(np.unique(TrainLabels))  #The number of classes in the data. This
  	# create model
  
 Estimator = Sequential()
-Estimator.add(Dense(128, kernel_regularizer= regularizers.l2(0.001),input_dim=Ndims, kernel_initializer='normal', activation=NAF))
 Estimator.add(Dense(64, kernel_regularizer= regularizers.l2(0.001),input_dim=Ndims, kernel_initializer='normal', activation=NAF))
 Estimator.add(BatchNormalization(axis=-1, momentum=0.99, epsilon=0.001, center=True, scale=True, beta_initializer='zeros', gamma_initializer='ones', moving_mean_initializer='zeros', moving_variance_initializer='ones', beta_regularizer=None, gamma_regularizer=None, beta_constraint=None, gamma_constraint=None))
 Estimator.add(Dense(32, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
