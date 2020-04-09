@@ -33,7 +33,7 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as colors
 import matplotlib.patches as mpatches
 import os
-
+from IPython import get_ipython
 
 
 
@@ -42,20 +42,21 @@ import os
 #############################################################
 
 '''Folder Settgings'''
-MainData = 'E:\\UAV2SEN\\MLdata\\Fulldata_4xnoise'  #main data output from UAV2SEN_MakeCrispTensor.py. no extensions, will be fleshed out below
-SiteList = 'E:\\UAV2SEN\\SiteList.csv'#this has the lists of sites with name, month, year and 1s and 0s to identify training and validation sites
-DataFolder = 'E:\\UAV2SEN\\FinalTif\\'  #location of processed tif files
-ModelName = 'Fuzzy_exp_tests'  #Name and location of the final model to be saved in DataFolder. Add .h5 extension
+MainData = 'F:\\UAV2SEN\\MLdata\\Fulldata_4xnoise'  #main data output from UAV2SEN_MakeCrispTensor.py. no extensions, will be fleshed out below
+SiteList = 'F:\\UAV2SEN\\Results\\Experiments\\SiteList_exp1.csv'#this has the lists of sites with name, month, year and 1s and 0s to identify training and validation sites
+DataFolder = 'F:\\UAV2SEN\\FinalTif\\'  #location of processed tif files
+ModelName = 'Best_deep932a'  #Name and location of the final model to be saved in DataFolder. Add .h5 extension
 
 '''Model Features and Labels'''
-FeatureSet = ['B1','B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12'] # pick predictor bands from: ['B1','B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12']
+FeatureSet = ['B2','B3','B4','B5','B6','B7','B8','B9','B11','B12'] # pick predictor bands from: ['B1','B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12']
 LabelSet = ['WaterMem', 'VegMem','SedMem' ]
 
 '''CNN parameters'''
-TrainingEpochs = 100 #Use model tuning to adjust this and prevent overfitting
-Nfilters =64
-size=5#size of the tensor tiles
+TrainingEpochs = 200 #Use model tuning to adjust this and prevent overfitting
+Nfilters= 32
+size=9#size of the tensor tiles
 LearningRate = 0.0005
+BatchSize=5000
 Chatty = 1 # set the verbosity of the model training. 
 NAF = 'tanh' #NN activation function
 ModelTuning = False #Plot the history of the training losses.  Increase the TrainingEpochs if doing this.
@@ -64,14 +65,14 @@ ModelTuning = False #Plot the history of the training losses.  Increase the Trai
 '''Validation Settings'''
 
 ShowValidation = False#if true fuzzy classified images of the validation sites will be displayed.  Warning: xpensive to compute.
-PublishHist = False#best quality historgams
+PublishHist = True#best quality historgams
 Ytop=6.5
-SaveName='E:\\UAV2SEN\\Results\\Experiments\\HistTest.png'
+SaveName='F:\\UAV2SEN\\Results\\Experiments\\Hist_deep932a.png'
 OutDPI=600
 Fname='Arial'
-Fsize=10
+Fsize=14
 Fweight='bold'
-Lweight=1.5
+Lweight=1
 
 
 #################################################################################
@@ -152,7 +153,7 @@ for s in range(len(TrainingSites.Site)):
 TrainingDF = TrainingDF.loc[MasterValid]
 TrainingTensor=np.compress(MasterValid,TrainingTensor, axis=0)#will delete where valid is false
 
-MasterValid = (np.zeros(len(MasterLabelDF.index)))
+MasterValid = (np.zeros(len(MasterLabelDF.index)))==1
 for s in range(len(ValidationSites.Site)):
     Valid = (ValidationDF.Site == ValidationSites.Abbrev[s])&(ValidationDF.Year==ValidationSites.Year[s])&(ValidationDF.Month==ValidationSites.Month[s])
     MasterValid = MasterValid | Valid
@@ -206,7 +207,10 @@ inShape = TrainingTensor.shape[1:]
  	# create model
 
 Estimator = Sequential()
-Estimator.add(Conv2D(Nfilters,size, data_format='channels_last', input_shape=inShape, activation=NAF))
+Estimator.add(Conv2D(Nfilters,3, data_format='channels_last', input_shape=inShape, activation=NAF))
+Estimator.add(Conv2D(Nfilters,3, activation=NAF))#tentative deep architecture. gives poor results!
+Estimator.add(Conv2D(Nfilters,3,  activation=NAF))
+Estimator.add(Conv2D(Nfilters,3, activation=NAF))
 Estimator.add(Flatten())
 Estimator.add(Dense(64, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
 Estimator.add(BatchNormalization(axis=-1, momentum=0.99, epsilon=0.001, center=True, scale=True, beta_initializer='zeros', gamma_initializer='ones', moving_mean_initializer='zeros', moving_variance_initializer='ones', beta_regularizer=None, gamma_regularizer=None, beta_constraint=None, gamma_constraint=None))
@@ -227,26 +231,27 @@ Estimator.summary()
 ###############################################################################
 """Data Splitting"""
 
-X_train, X_test, y_train, y_test = train_test_split(TrainingTensor, TrainingLabels, test_size=0.2, random_state=42)
+X_train, X_test, y_train, y_test = train_test_split(TrainingTensor, TrainingLabels, test_size=0.2, random_state=int(42*np.random.random(1)))
 
 
 if ModelTuning:
     #Split the data for tuning. Use a double pass of train_test_split to shave off some data
-   
-    history = Estimator.fit(X_train, y_train, epochs = TrainingEpochs, batch_size = 1000, validation_data = (X_test, y_test))
+    #get_ipython().run_line_magic('matplotlib', 'qt')
+    history = Estimator.fit(X_train, y_train, epochs = TrainingEpochs, batch_size = BatchSize, validation_data = (X_test, y_test))
     #Plot the test results
     history_dict = history.history
     loss_values = history_dict['loss']
     val_loss_values = history_dict['val_loss']
-    
+    figfonts=48
     epochs = range(1, len(loss_values) + 1)
-    mpl.rc('xtick', labelsize=20) 
-    mpl.rc('ytick', labelsize=20) 
-    plt.figure()
+    mpl.rc('xtick', labelsize=figfonts) 
+    mpl.rc('ytick', labelsize=figfonts) 
+    figsize=(9,6)
     plt.subplot(1,2,1)
     plt.plot(epochs, loss_values, 'ks', label = 'Training loss')
     plt.plot(epochs,val_loss_values, 'k:', label = 'Validation loss')
     #plt.title('Training and Validation Loss')
+    #plt.ylim(0.5, 0.9)
     plt.xlabel('Epochs')
     plt.ylabel('Loss')
     plt.legend()
@@ -257,10 +262,11 @@ if ModelTuning:
     plt.plot(epochs, acc_values, 'ko', label = 'Training accuracy')
     plt.plot(epochs, val_acc_values, 'k', label = 'Validation accuracy')
     #plt.title('Training and Validation Accuracy')
+    plt.ylim(0.5, 0.9)
     plt.xlabel('Epochs')
     plt.ylabel('Accuracy')
     plt.legend()
-    plt.rcParams.update({'font.size': 22})
+    plt.rcParams.update({'font.size': figfonts})
     plt.rcParams.update({'font.weight': 'bold'}) 
     plt.show()
 
@@ -270,7 +276,7 @@ if ModelTuning:
 
 '''Model Fitting'''
 print('Fitting CNN Classifier on ' + str(len(X_train)) + ' pixels')
-Estimator.fit(X_train, y_train, batch_size=1000, epochs=TrainingEpochs, verbose=Chatty)
+Estimator.fit(X_train, y_train, batch_size=BatchSize, epochs=TrainingEpochs, verbose=Chatty)
 
     
 
@@ -302,29 +308,34 @@ print('20% test RMS error for SUB-DOMINANT class= ', str(RMSsubdom))
 print('20% test QPA for the SUB-DOMINANT class= '+ str(QPAsubdom))
 
 print('\n')
-
+#get_ipython().run_line_magic('matplotlib', 'qt')
 if PublishHist:
     mpl.rcParams['font.family'] = Fname
     plt.rcParams['font.size'] = Fsize
     plt.rcParams['axes.linewidth'] = Lweight
     plt.rcParams['font.weight'] = Fweight
     datbins=np.linspace(-1,1,40)
+    #get_ipython().run_line_magic('matplotlib', 'qt')
     plt.figure()
     plt.subplot(2,2,1)
-    sns.distplot(DominantErrorsDF.Dominant_Error,axlabel=' ', bins=datbins, color='k', kde=False)
+    sns.distplot(DominantErrorsDF.Dominant_Error,axlabel=' ', bins=datbins, color='k', kde=False, norm_hist=True)
     #plt.ylim(0, Ytop)
     plt.xticks((-1.0, -0.5, 0.0,0.5, 1.0))
+    plt.xticks(fontsize=Fsize)
+    plt.yticks(fontsize=Fsize)
     plt.ylabel('Test Density', fontweight=Fweight)
     plt.subplot(2,2,2)
-    sns.distplot(DominantErrorsDF['Sub-Dominant_Error'], axlabel=' ',bins=datbins, color='k', kde=False)
+    sns.distplot(DominantErrorsDF['Sub-Dominant_Error'], axlabel=' ',bins=datbins, color='k', kde=False, norm_hist=True)
     #plt.ylim(0, Ytop)
     plt.xticks((-1.0, -0.5, 0.0,0.5, 1.0))
-
+    plt.xticks(fontsize=Fsize)
+    plt.yticks(fontsize=Fsize)
 
 
 else:
     
     datbins=np.linspace(-1,1,40)
+    #get_ipython().run_line_magic('matplotlib', 'qt')
     plt.figure()
     plt.subplot(1,2,1)
     sns.distplot(DominantErrorsDF.Dominant_Error, axlabel='', bins=datbins, color='k', kde=False)
@@ -366,22 +377,28 @@ if PublishHist:
     plt.rcParams['font.weight'] = Fweight
     datbins=np.linspace(-1,1,40)
     plt.subplot(2,2,3)
-    sns.distplot(DominantErrorsDF.Dominant_Error, bins=datbins, color='k', kde=False)
+    sns.distplot(DominantErrorsDF.Dominant_Error, bins=datbins, color='k',kde=False, norm_hist=True)
     #plt.ylim(0, Ytop)
-    plt.ylabel('Validation Density', fontweight=Fweight)
+    plt.ylabel('CNN Error Density', fontweight=Fweight)
     plt.xlabel('Dominant Class Error', fontweight=Fweight)
     plt.xticks((-1.0, -0.5, 0.0,0.5, 1.0))
+    plt.xticks(fontsize=Fsize)
+    plt.yticks(fontsize=Fsize)
+    
     plt.subplot(2,2,4)
-    sns.distplot(DominantErrorsDF['Sub-Dominant_Error'], bins=datbins, color='k', kde=False)
+    sns.distplot(DominantErrorsDF['Sub-Dominant_Error'], bins=datbins, color='k', kde=False, norm_hist=True)
     plt.xlabel('Sub-Dominant Class Error', fontweight=Fweight)
     plt.xticks((-1.0, -0.5, 0.0,0.5, 1.0))
+    plt.xticks(fontsize=Fsize)
+    plt.yticks(fontsize=Fsize)
     #plt.ylim(0, Ytop)
     plt.savefig(SaveName, dpi=OutDPI, transparent=False, bbox_inches='tight')
 
 
 
 
-else:
+#else:
+    #get_ipython().run_line_magic('matplotlib', 'qt')
     plt.figure()
     plt.subplot(1,2,1)
     sns.distplot(DominantErrorsDF.Dominant_Error, axlabel='Dominant Class Errors', bins=datbins, color='b')
@@ -443,6 +460,7 @@ if ShowValidation:
 #        DominantErrorImage = np.int16(255*DominantErrors[:,0].reshape(ValidRaster.shape[0]-size, ValidRaster.shape[1]-size))
 
         cmapCHM = colors.ListedColormap(['black','red','lime','blue'])
+        #get_ipython().run_line_magic('matplotlib', 'qt')
         plt.figure(figsize=(10,5))
         plt.subplot(1,3,1)
         plt.imshow(ValidRasterIR)
