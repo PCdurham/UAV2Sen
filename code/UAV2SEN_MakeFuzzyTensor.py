@@ -26,15 +26,15 @@ import rasterio
 """Inputs"""
 #############################################################
 
-SiteList = 'EMPTY'#this has the lists of sites with name, month and year
-DatFolder = 'EMPTY' #location of above
+SiteList = 'F:\\UAV2SEN\\SiteList.csv'#this has the lists of sites with name, month and year
+DatFolder = 'F:\\UAV2SEN\\FinalTif\\'  #location of above
 
 #tile size 
-size=5
+size=9
 
 
 #Output location
-Outfile = 'EMPTY' #no extensions needed, added later
+Outfile = 'F:\\UAV2SEN\\MLdata\\Fulldata_4xnoise' #no extensions needed, added later
 
 '''Functions'''
 def map2pix(rasterfile,xmap,ymap):
