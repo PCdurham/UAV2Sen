@@ -44,19 +44,18 @@ import os
 #############################################################
 
 '''Folder Settgings'''
-MainData = 'E:\\UAV2SEN\\MLdata\\FullData_4xnoise'  #main data output from UAV2SEN_MakeCrispTensor.py. no extensions, will be fleshed out below
-SiteList = 'E:\\UAV2SEN\\SiteList.csv'#this has the lists of sites with name, month, year and 1s and 0s to identify training and validation sites
-DataFolder = 'E:\\UAV2SEN\\FinalTif\\'  #location of processed tif files
+MainData = 'F:\\UAV2SEN\\MLdata\\Fulldata_4xnoise'  #main data output from UAV2SEN_MakeCrispTensor.py. no extensions, will be fleshed out below
+SiteList = 'F:\\UAV2SEN\\SiteList.csv'#this has the lists of sites with name, month, year and 1s and 0s to identify training and validation sites
+DataFolder = 'F:\\UAV2SEN\\FinalTif\\'  #location of processed tif files
 
 '''Model Features and Labels'''
 LabelSet = ['WaterMem', 'VegMem','SedMem' ]
-FeatureSet = ['B2','B3','B4','B8'] # pick predictor bands from: ['B1','B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12']
+FeatureSet = ['B2','B3','B4','B5','B6','B7','B8','B9','B11','B12'] # pick predictor bands from: ['B1','B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12']
 
 '''CNN parameters'''
-TrainingEpochs = 100 #Use model tuning to adjust this and prevent overfitting
-Nfilters = 256
-size=3#size of the tensor tiles
-KernelSize=3 # size of the convolution kernels
+TrainingEpochs = 200 #Use model tuning to adjust this and prevent overfitting
+Nfilters = 2
+size=5#size of the tensor tiles
 LearningRate = 0.0005
 Chatty = 1 # set the verbosity of the model training. 
 NAF = 'relu' #NN activation function
@@ -140,7 +139,7 @@ for s in range(len(TrainingSites.Site)):
 TrainingDF = TrainingDF.loc[MasterValid]
 TrainingTensor=np.compress(MasterValid,TrainingTensor, axis=0)
 
-MasterValid = (np.zeros(len(MasterValidationDF.index)))
+MasterValid = (np.zeros(len(MasterValidationDF.index)))==1
 for s in range(len(ValidationSites.Site)):
     Valid = (MasterValidationDF.Site == ValidationSites.Abbrev[s])&(MasterValidationDF.Year==ValidationSites.Year[s])&(MasterValidationDF.Month==ValidationSites.Month[s])
     MasterValid = MasterValid | Valid
@@ -211,41 +210,14 @@ inShape = TrainingTensor.shape[1:]
 # define the model with L2 regularization and dropout
 
  	# create model
-if size==3: 
-    Estimator = Sequential()
-    Estimator.add(Conv2D(Nfilters,KernelSize, data_format='channels_last', input_shape=inShape, activation=NAF))
-    Estimator.add(Flatten())
-    Estimator.add(Dense(64, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
-    Estimator.add(BatchNormalization(axis=-1, momentum=0.99, epsilon=0.001, center=True, scale=True, beta_initializer='zeros', gamma_initializer='ones', moving_mean_initializer='zeros', moving_variance_initializer='ones', beta_regularizer=None, gamma_regularizer=None, beta_constraint=None, gamma_constraint=None))
-    Estimator.add(Dense(32, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
-    Estimator.add(Dense(16, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
-    Estimator.add(Dense(NClasses, kernel_initializer='normal', activation='linear'))    
-
-
-elif size==5:
-    Estimator = Sequential()
-    Estimator.add(Conv2D(Nfilters,KernelSize, data_format='channels_last', input_shape=inShape, activation=NAF))
-    Estimator.add(Conv2D(Nfilters//2,KernelSize, activation=NAF))
-    Estimator.add(Flatten())
-    Estimator.add(Dense(64, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
-    Estimator.add(BatchNormalization(axis=-1, momentum=0.99, epsilon=0.001, center=True, scale=True, beta_initializer='zeros', gamma_initializer='ones', moving_mean_initializer='zeros', moving_variance_initializer='ones', beta_regularizer=None, gamma_regularizer=None, beta_constraint=None, gamma_constraint=None))
-    Estimator.add(Dense(32, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
-    Estimator.add(Dense(16, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
-    Estimator.add(Dense(NClasses, kernel_initializer='normal', activation='linear'))
-    
-elif size==7:
-    Estimator = Sequential()
-    Estimator.add(Conv2D(Nfilters,KernelSize, data_format='channels_last', input_shape=inShape, activation=NAF))
-    Estimator.add(Conv2D(Nfilters//2,KernelSize, activation=NAF))
-    Estimator.add(Conv2D(Nfilters//4,KernelSize, activation=NAF))
-    Estimator.add(Flatten())
-    Estimator.add(Dense(64, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
-    Estimator.add(BatchNormalization(axis=-1, momentum=0.99, epsilon=0.001, center=True, scale=True, beta_initializer='zeros', gamma_initializer='ones', moving_mean_initializer='zeros', moving_variance_initializer='ones', beta_regularizer=None, gamma_regularizer=None, beta_constraint=None, gamma_constraint=None))
-    Estimator.add(Dense(32, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
-    Estimator.add(Dense(16, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
-    Estimator.add(Dense(NClasses, kernel_initializer='normal', activation='linear'))
-else:
-    raise Exception('Invalid tile size, only 3,5 and 7 available')
+Estimator = Sequential()
+Estimator.add(Conv2D(Nfilters,size, data_format='channels_last', input_shape=inShape, activation=NAF))
+Estimator.add(Flatten())
+Estimator.add(Dense(64, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
+Estimator.add(BatchNormalization(axis=-1, momentum=0.99, epsilon=0.001, center=True, scale=True, beta_initializer='zeros', gamma_initializer='ones', moving_mean_initializer='zeros', moving_variance_initializer='ones', beta_regularizer=None, gamma_regularizer=None, beta_constraint=None, gamma_constraint=None))
+Estimator.add(Dense(32, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
+Estimator.add(Dense(16, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
+Estimator.add(Dense(NClasses, kernel_initializer='normal', activation='linear'))    
 
 
 #Tune an optimiser
@@ -260,7 +232,7 @@ Estimator.summary()
 
 X_train, X_test, y_train, y_test = train_test_split(TrainingTensor, TrainingLabels, test_size=0.2, random_state=42)
 print('Fitting CNN Classifier on ' + str(len(X_train)) + ' pixels')
-Estimator.fit(X_train, y_train, batch_size=1000, epochs=TrainingEpochs, verbose=Chatty)#, class_weight=weights)
+Estimator.fit(X_train, y_train, batch_size=5000, epochs=TrainingEpochs, verbose=Chatty)#, class_weight=weights)
 
 '''Validate the model by crisping up the test and validation data and predicting classes instead of memberships'''
 
@@ -276,21 +248,21 @@ print('CRISP Validation results for relative majority ')
 print(report)
 print('\n \n')
 
-ClassPredicted = 1+np.argmax(PredictedPixels, axis=1)
-ClassPredicted_maj = ClassPredicted[np.max(PredictedPixels, axis=1)>0.50]
-ClassTrue = Y[np.max(PredictedPixels, axis=1)>0.50]
-report = metrics.classification_report(ClassTrue, ClassPredicted_maj, digits = 3)
-print('CRISP Validation results for majority ')
-print(report)
-print('\n \n')
+#ClassPredicted = 1+np.argmax(PredictedPixels, axis=1)
+#ClassPredicted_maj = ClassPredicted[np.max(PredictedPixels, axis=1)>0.50]
+#ClassTrue = Y[np.max(PredictedPixels, axis=1)>0.50]
+#report = metrics.classification_report(ClassTrue, ClassPredicted_maj, digits = 3)
+#print('CRISP Validation results for majority ')
+#print(report)
+#print('\n \n')
 
-ClassPredicted = 1+np.argmax(PredictedPixels, axis=1)
-ClassPredicted_pure = ClassPredicted[np.max(PredictedPixels, axis=1)>PureThresh]
-ClassTrue = Y[np.max(PredictedPixels, axis=1)>PureThresh]
-report = metrics.classification_report(ClassTrue, ClassPredicted_pure, digits = 3)
-print('CRISP Validation results for pure class  ')
-print(report)
-print('\n \n')
+#ClassPredicted = 1+np.argmax(PredictedPixels, axis=1)
+#ClassPredicted_pure = ClassPredicted[np.max(PredictedPixels, axis=1)>PureThresh]
+#ClassTrue = Y[np.max(PredictedPixels, axis=1)>PureThresh]
+#report = metrics.classification_report(ClassTrue, ClassPredicted_pure, digits = 3)
+#print('CRISP Validation results for pure class  ')
+#print(report)
+#print('\n \n')
 
 
 
