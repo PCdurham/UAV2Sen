@@ -45,20 +45,20 @@ from IPython import get_ipython
 MainData = 'F:\\UAV2SEN\\MLdata\\Fulldata_4xnoise'  #main data output from UAV2SEN_MakeCrispTensor.py. no extensions, will be fleshed out below
 SiteList = 'F:\\UAV2SEN\\Results\\Experiments\\SiteList_exp1.csv'#this has the lists of sites with name, month, year and 1s and 0s to identify training and validation sites
 DataFolder = 'F:\\UAV2SEN\\FinalTif\\'  #location of processed tif files
-ModelName = 'Best_deep932a'  #Name and location of the final model to be saved in DataFolder. Add .h5 extension
+ModelName = 'D_7_512_1B'  #Name and location of the final model to be saved in DataFolder. Add .h5 extension
 
 '''Model Features and Labels'''
-FeatureSet = ['B2','B3','B4','B5','B6','B7','B8','B9','B11','B12'] # pick predictor bands from: ['B1','B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12']
+FeatureSet = ['B2','B3','B4','B8'] # pick predictor bands from: ['B1','B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12']
 LabelSet = ['WaterMem', 'VegMem','SedMem' ]
 
 '''CNN parameters'''
 TrainingEpochs = 200 #Use model tuning to adjust this and prevent overfitting
-Nfilters= 32
-size=9#size of the tensor tiles
+Nfilters= 512
+size=7#size of the tensor tiles
 LearningRate = 0.0005
 BatchSize=5000
 Chatty = 1 # set the verbosity of the model training. 
-NAF = 'tanh' #NN activation function
+NAF = 'relu' #NN activation function
 ModelTuning = False #Plot the history of the training losses.  Increase the TrainingEpochs if doing this.
 
 
@@ -210,7 +210,7 @@ Estimator = Sequential()
 Estimator.add(Conv2D(Nfilters,3, data_format='channels_last', input_shape=inShape, activation=NAF))
 Estimator.add(Conv2D(Nfilters,3, activation=NAF))#tentative deep architecture. gives poor results!
 Estimator.add(Conv2D(Nfilters,3,  activation=NAF))
-Estimator.add(Conv2D(Nfilters,3, activation=NAF))
+#Estimator.add(Conv2D(Nfilters,3, activation=NAF))
 Estimator.add(Flatten())
 Estimator.add(Dense(64, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
 Estimator.add(BatchNormalization(axis=-1, momentum=0.99, epsilon=0.001, center=True, scale=True, beta_initializer='zeros', gamma_initializer='ones', moving_mean_initializer='zeros', moving_variance_initializer='ones', beta_regularizer=None, gamma_regularizer=None, beta_constraint=None, gamma_constraint=None))
@@ -295,16 +295,16 @@ DominantErrors=GetDominantClassErrors(np.asarray(y_test), PredictedPixels)
 D={'Dominant_Error':DominantErrors[:,0],'Sub-Dominant_Error':DominantErrors[:,1] }
 DominantErrorsDF = pd.DataFrame(D)
 
-RMSdom = np.sqrt(np.mean(DominantErrors[:,0]*DominantErrors[:,0]))
-RMSsubdom = np.sqrt(np.mean(DominantErrors[:,1]*DominantErrors[:,1]))
+AbsMeandom = np.mean(np.abs(DominantErrors[:,0]))
+AbsMeansubdom = np.mean(np.abs(DominantErrors[:,1]))
 QPAdom = np.sum(np.abs(DominantErrors[:,0])<0.25)/len(DominantErrors[:,0])
 QPAsubdom = np.sum(np.abs(DominantErrors[:,1])<0.25)/len(DominantErrors[:,1])
 
 print('20% test mean error for DOMINANT class= ', str(np.mean(DominantErrors[:,0])))
-print('20% test RMS error for DOMINANT class= ', str(RMSdom))
+print('20% test abs. mean error for DOMINANT class= ', str(AbsMeandom))
 print('20% test QPA for the DOMINANT class= '+ str(QPAdom))
-print('20% test mean error for SUB-DOMINANT class= ', str(np.mean(DominantErrors[:,1])))
-print('20% test RMS error for SUB-DOMINANT class= ', str(RMSsubdom))
+print('20% test abs. mean error for SUB-DOMINANT class= ', str(np.mean(DominantErrors[:,1])))
+print('20% test RMS error for SUB-DOMINANT class= ', str(AbsMeansubdom))
 print('20% test QPA for the SUB-DOMINANT class= '+ str(QPAsubdom))
 
 print('\n')
@@ -355,17 +355,17 @@ DominantErrors=GetDominantClassErrors(np.asarray(ValidationLabels), PredictedPix
 D={'Dominant_Error':DominantErrors[:,0],'Sub-Dominant_Error':DominantErrors[:,1] }
 DominantErrorsDF = pd.DataFrame(D)
 
-RMSdom = np.sqrt(np.mean(DominantErrors[:,0]*DominantErrors[:,0]))
-RMSsubdom = np.sqrt(np.mean(DominantErrors[:,1]*DominantErrors[:,1]))
+AbsMeandom = np.mean(np.abs(DominantErrors[:,0]))
+AbsMeansubdom = np.mean(np.abs(DominantErrors[:,1]))
 QPAdom = np.sum(np.abs(DominantErrors[:,0])<0.25)/len(DominantErrors[:,0])
 QPAsubdom = np.sum(np.abs(DominantErrors[:,1])<0.25)/len(DominantErrors[:,1])
 
 
 print('Validation mean error for DOMINANT class= ', str(np.mean(DominantErrors[:,0])))
-print('Validation RMS error for DOMINANT class= ', str(RMSdom))
+print('Validation abs. mean error for DOMINANT class= ', str(AbsMeandom))
 print('Validation QPA for the DOMINANT class= '+ str(QPAdom))
 print('Validation mean error for SUB-DOMINANT class= ', str(np.mean(DominantErrors[:,1])))
-print('Validation RMS error for SUB-DOMINANT class= ', str(RMSsubdom))
+print('Validation abs. mean error for SUB-DOMINANT class= ', str(AbsMeansubdom))
 print('Validation QPA for the SUB-DOMINANT class= '+ str(QPAsubdom))
 print('\n')
 
