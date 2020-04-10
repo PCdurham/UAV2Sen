@@ -54,26 +54,14 @@ LabelSet = ['WaterMem', 'VegMem','SedMem' ]
 
 '''CNN parameters'''
 TrainingEpochs = 200 #Use model tuning to adjust this and prevent overfitting
-Nfilters= 128
-size=9#size of the tensor tiles
+Nfilters= 512
+size=7#size of the tensor tiles
 LearningRate = 0.0005
 BatchSize=5000
 Chatty = 1 # set the verbosity of the model training. 
 NAF = 'relu' #NN activation function
-ModelTuning = False #Plot the history of the training losses.  Increase the TrainingEpochs if doing this.
 
 
-'''Validation Settings'''
-
-ShowValidation = False#if true fuzzy classified images of the validation sites will be displayed.  Warning: xpensive to compute.
-PublishHist = True#best quality historgams
-Ytop=6.5
-SaveName='F:\\UAV2SEN\\Results\\Experiments\\Hist_deep932a.png'
-OutDPI=600
-Fname='Arial'
-Fsize=14
-Fweight='bold'
-Lweight=1
 
 
 #################################################################################
@@ -208,10 +196,10 @@ inShape = TrainingTensor.shape[1:]
  	# create model
 def score_model():
     Estimator = Sequential()
-    Estimator.add(Conv2D(Nfilters,3, data_format='channels_last', input_shape=inShape, activation=NAF))
+    Estimator.add(Conv2D(Nfilters,size, data_format='channels_last', input_shape=inShape, activation=NAF))
     Estimator.add(Conv2D(Nfilters,3, activation=NAF))#tentative deep architecture. gives poor results!
     Estimator.add(Conv2D(Nfilters,3,  activation=NAF))
-    Estimator.add(Conv2D(Nfilters,3, activation=NAF))
+    #Estimator.add(Conv2D(Nfilters,3, activation=NAF))
     Estimator.add(Flatten())
     Estimator.add(Dense(64, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
     Estimator.add(BatchNormalization(axis=-1, momentum=0.99, epsilon=0.001, center=True, scale=True, beta_initializer='zeros', gamma_initializer='ones', moving_mean_initializer='zeros', moving_variance_initializer='ones', beta_regularizer=None, gamma_regularizer=None, beta_constraint=None, gamma_constraint=None))
