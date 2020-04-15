@@ -12,8 +12,8 @@ import pandas as pd
 import skimage.io as io
 
 
-SiteList = 'E:\\UAV2SEN\\SiteList.csv'
-DatFolder = 'E:\\UAV2SEN\\FinalTif\\'
+SiteList = 'EMPTY'
+DatFolder = 'EMPTY'
 SiteDF = pd.read_csv(SiteList)
 for s in range(len(SiteDF.Site)):
     print('Checking '+SiteDF.Site[s]+' '+str(SiteDF.Month[s])+' '+str(SiteDF.Year[s]))
