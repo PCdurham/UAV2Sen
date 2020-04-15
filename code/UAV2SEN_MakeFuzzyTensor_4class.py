@@ -27,9 +27,9 @@ import os
 #############################################################
 
 #
-Image1='F:\MixClass\\S2_BAVAL_SR.tif'
-Class1='F:\MixClass\\BA_Valle_S2_CLS.tif'
-ClassUAV1='F:\MixClass\\BA_valle_Drone_CLS.tif'
+Image1='EMPTY'
+Class1='EMPTY'
+ClassUAV1='EMPTY'
 #
 
 
@@ -38,7 +38,7 @@ size=5
 middle=2
 
 #Output location
-Outfile = 'F:\MixClass\\gitest' #no extensions needed, added later
+Outfile = 'EMPTY' #no extensions needed, added later
 
 '''Functions'''
 def map2pix(rasterfile,xmap,ymap):
