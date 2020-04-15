@@ -8,7 +8,7 @@ __license__ = 'MIT'
 
 '''
 
-This script performs fuzzy classification of river corridor features with a CNN.  the script allows 
+This script performs fuzzy classification of river corridor features with a DNN.  the script allows 
 the user to tune, train, validate and save CNN models.  The required inputs must be produced with the
 UAV2SEN_MakeFuzzyTensor.py script.
 
@@ -42,10 +42,10 @@ from IPython import get_ipython
 #############################################################
 
 '''Folder Settgings'''
-MainData = 'F:\\UAV2SEN\\MLdata\\Fulldata_4xnoise'  #main data output from UAV2SEN_MakeCrispTensor.py. no extensions, will be fleshed out below
-SiteList = 'F:\\UAV2SEN\\Results\\Experiments\\SiteList_exp1.csv'#this has the lists of sites with name, month, year and 1s and 0s to identify training and validation sites
-DataFolder = 'F:\\UAV2SEN\\FinalTif\\'  #location of processed tif files
-ModelName = 'Fuzzy_DNN_exp1'  #Name and location of the final model to be saved in DataFolder. Add .h5 extension
+MainData = 'EMPTY'  #main data output from UAV2SEN_MakeCrispTensor.py. no extensions, will be fleshed out below
+SiteList = 'EMPTY'#this has the lists of sites with name, month, year and 1s and 0s to identify training and validation sites
+DataFolder = 'EMPTY'  #location of processed tif files
+ModelName = 'EMPTY'  #Name and location of the final model to be saved in DataFolder. Add .h5 extension
 
 '''Model Features and Labels'''
 FeatureSet = ['B2','B3','B4','B5','B6','B7','B8','B9','B11','B12'] # pick predictor bands from: ['B1','B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12']
@@ -53,11 +53,11 @@ LabelSet = ['WaterMem', 'VegMem','SedMem' ]
 
 '''DNN parameters'''
 TrainingEpochs = 200 #Use model tuning to adjust this and prevent overfitting
-size=3#size of the tensor tiles. very little effect for the DNN, size 3 tiles have a bit more data due to edge effects during tiling
+size=5#size of the tensor tiles. very little effect for the DNN, size 3 tiles have a bit more data due to edge effects during tiling
 LearningRate = 0.0005
 BatchSize=5000
 Chatty = 1 # set the verbosity of the model training. 
-NAF = 'tanh' #NN activation function
+NAF = 'relu' #NN activation function
 ModelTuning = False #Plot the history of the training losses.  Increase the TrainingEpochs if doing this.
 
 
@@ -66,8 +66,8 @@ ModelTuning = False #Plot the history of the training losses.  Increase the Trai
 ShowValidation = False#if true fuzzy classified images of the validation sites will be displayed.  Warning: xpensive to compute.
 PublishHist = True#best quality historgams
 Ytop=6.5
-SaveName='F:\\UAV2SEN\\Results\\Experiments\\HistDNN_exp1.png'
-OutDPI=600
+SaveName='EMPTY'
+OutDPI=1200
 Fname='Arial'
 Fsize=10
 Fweight='bold'
@@ -232,7 +232,7 @@ Estimator.summary()
 ###############################################################################
 """Data Splitting"""
 
-X_train, X_test, y_train, y_test = train_test_split(TrainingFeatures, TrainingLabels, test_size=0.2, random_state=42)
+X_train, X_test, y_train, y_test = train_test_split(TrainingFeatures, TrainingLabels, test_size=0.001, random_state=42*int(np.random.random(1)))
 
 
 if ModelTuning:
@@ -289,21 +289,20 @@ Estimator.save(ModelName,save_format='h5')
 #Test data
 PredictedPixels = Estimator.predict(X_test)
 
-
 DominantErrors=GetDominantClassErrors(np.asarray(y_test), PredictedPixels)
 D={'Dominant_Error':DominantErrors[:,0],'Sub-Dominant_Error':DominantErrors[:,1] }
 DominantErrorsDF = pd.DataFrame(D)
 
-RMSdom = np.sqrt(np.mean(DominantErrors[:,0]*DominantErrors[:,0]))
-RMSsubdom = np.sqrt(np.mean(DominantErrors[:,1]*DominantErrors[:,1]))
+AbsMeandom = np.mean(np.abs(DominantErrors[:,0]))
+AbsMeansubdom = np.mean(np.abs(DominantErrors[:,1]))
 QPAdom = np.sum(np.abs(DominantErrors[:,0])<0.25)/len(DominantErrors[:,0])
 QPAsubdom = np.sum(np.abs(DominantErrors[:,1])<0.25)/len(DominantErrors[:,1])
 
 print('20% test mean error for DOMINANT class= ', str(np.mean(DominantErrors[:,0])))
-print('20% test RMS error for DOMINANT class= ', str(RMSdom))
+print('20% test abs. mean error for DOMINANT class= ', str(AbsMeandom))
 print('20% test QPA for the DOMINANT class= '+ str(QPAdom))
-print('20% test mean error for SUB-DOMINANT class= ', str(np.mean(DominantErrors[:,1])))
-print('20% test RMS error for SUB-DOMINANT class= ', str(RMSsubdom))
+print('20% test abs. mean error for SUB-DOMINANT class= ', str(np.mean(DominantErrors[:,1])))
+print('20% test RMS error for SUB-DOMINANT class= ', str(AbsMeansubdom))
 print('20% test QPA for the SUB-DOMINANT class= '+ str(QPAsubdom))
 
 print('\n')
@@ -349,24 +348,25 @@ else:
 #Validation data
 PredictedPixels = Estimator.predict(ValidationFeatures)
 
-
 DominantErrors=GetDominantClassErrors(np.asarray(ValidationLabels), PredictedPixels)
 D={'Dominant_Error':DominantErrors[:,0],'Sub-Dominant_Error':DominantErrors[:,1] }
 DominantErrorsDF = pd.DataFrame(D)
 
-RMSdom = np.sqrt(np.mean(DominantErrors[:,0]*DominantErrors[:,0]))
-RMSsubdom = np.sqrt(np.mean(DominantErrors[:,1]*DominantErrors[:,1]))
+AbsMeandom = np.mean(np.abs(DominantErrors[:,0]))
+AbsMeansubdom = np.mean(np.abs(DominantErrors[:,1]))
 QPAdom = np.sum(np.abs(DominantErrors[:,0])<0.25)/len(DominantErrors[:,0])
 QPAsubdom = np.sum(np.abs(DominantErrors[:,1])<0.25)/len(DominantErrors[:,1])
 
 
-print('Validation mean error for DOMINANT class= ', str(np.mean(DominantErrors[:,0])))
-print('Validation RMS error for DOMINANT class= ', str(RMSdom))
-print('Validation QPA for the DOMINANT class= '+ str(QPAdom))
-print('Validation mean error for SUB-DOMINANT class= ', str(np.mean(DominantErrors[:,1])))
-print('Validation RMS error for SUB-DOMINANT class= ', str(RMSsubdom))
-print('Validation QPA for the SUB-DOMINANT class= '+ str(QPAsubdom))
-print('\n')
+DominantErrors[:,0]
+
+#print('Validation mean error for DOMINANT class= ', str(np.mean(DominantErrors[:,0])))
+print('Validation abs. mean error for DOMINANT class= ', str(AbsMeandom))
+print(np.median(DominantErrors[:,0]), np.var(DominantErrors[:,0]))
+#print('Validation QPA for the DOMINANT class= '+ str(QPAdom))
+#print('Validation mean error for SUB-DOMINANT class= ', str(np.mean(DominantErrors[:,1])))
+#print('Validation abs. mean error for SUB-DOMINANT class= ', str(AbsMeansubdom))
+#print('Validation QPA for the SUB-DOMINANT class= '+ str(QPAsubdom))
 
 
 if PublishHist:
