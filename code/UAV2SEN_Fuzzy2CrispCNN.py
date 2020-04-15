@@ -44,9 +44,9 @@ import os
 #############################################################
 
 '''Folder Settgings'''
-MainData = 'F:\\UAV2SEN\\MLdata\\Fulldata_4xnoise'  #main data output from UAV2SEN_MakeCrispTensor.py. no extensions, will be fleshed out below
-SiteList = 'F:\\UAV2SEN\\SiteList.csv'#this has the lists of sites with name, month, year and 1s and 0s to identify training and validation sites
-DataFolder = 'F:\\UAV2SEN\\FinalTif\\'  #location of processed tif files
+MainData = 'EMPTY'  #main data output from UAV2SEN_MakeCrispTensor.py. no extensions, will be fleshed out below
+SiteList = 'EMPTY'#this has the lists of sites with name, month, year and 1s and 0s to identify training and validation sites
+DataFolder = 'EMPTY'
 
 '''Model Features and Labels'''
 LabelSet = ['WaterMem', 'VegMem','SedMem' ]
@@ -54,7 +54,7 @@ FeatureSet = ['B2','B3','B4','B5','B6','B7','B8','B9','B11','B12'] # pick predic
 
 '''CNN parameters'''
 TrainingEpochs = 200 #Use model tuning to adjust this and prevent overfitting
-Nfilters = 2
+Nfilters = 32
 size=5#size of the tensor tiles
 LearningRate = 0.0005
 Chatty = 1 # set the verbosity of the model training. 
@@ -230,7 +230,7 @@ Estimator.summary()
 ###############################################################################
 """Data Fitting"""
 
-X_train, X_test, y_train, y_test = train_test_split(TrainingTensor, TrainingLabels, test_size=0.2, random_state=42)
+X_train, X_test, y_train, y_test = train_test_split(TrainingTensor, TrainingLabels, test_size=0.0001, random_state=42)
 print('Fitting CNN Classifier on ' + str(len(X_train)) + ' pixels')
 Estimator.fit(X_train, y_train, batch_size=5000, epochs=TrainingEpochs, verbose=Chatty)#, class_weight=weights)
 
@@ -243,10 +243,10 @@ Y=ValidationLabels
 ClassPredicted = 1+np.argmax(PredictedPixels, axis=1)
 ClassTrue = Y
 
-report = metrics.classification_report(ClassTrue, ClassPredicted, digits = 3)
-print('CRISP Validation results for relative majority ')
-print(report)
-print('\n \n')
+#report = metrics.classification_report(ClassTrue, ClassPredicted, digits = 3)
+#print('CRISP Validation results for relative majority ')
+#print(report)
+#print('\n \n')
 
 #ClassPredicted = 1+np.argmax(PredictedPixels, axis=1)
 #ClassPredicted_maj = ClassPredicted[np.max(PredictedPixels, axis=1)>0.50]
@@ -256,13 +256,13 @@ print('\n \n')
 #print(report)
 #print('\n \n')
 
-#ClassPredicted = 1+np.argmax(PredictedPixels, axis=1)
-#ClassPredicted_pure = ClassPredicted[np.max(PredictedPixels, axis=1)>PureThresh]
-#ClassTrue = Y[np.max(PredictedPixels, axis=1)>PureThresh]
-#report = metrics.classification_report(ClassTrue, ClassPredicted_pure, digits = 3)
-#print('CRISP Validation results for pure class  ')
-#print(report)
-#print('\n \n')
+ClassPredicted = 1+np.argmax(PredictedPixels, axis=1)
+ClassPredicted_pure = ClassPredicted[np.max(PredictedPixels, axis=1)>PureThresh]
+ClassTrue = Y[np.max(PredictedPixels, axis=1)>PureThresh]
+report = metrics.classification_report(ClassTrue, ClassPredicted_pure, digits = 3)
+print('CRISP Validation results for pure class  ')
+print(report)
+print('\n \n')
 
 
 
