@@ -40,6 +40,8 @@ UAV2SEN_FuzzyCNN will use the fuzzy membership data.  The routine has similar mo
 
 UAV2SEN_Fuzzy2CrispCNN will train a fuzzy model but will use this model to predict crisp classes. Validation will be done with F1 scores and here the user can adjust the threshold of what constitutes a pure class. There is also an option to display the mapped output of the validation site predictions. The trained model will NOT be saved to disk. Use the fuzzyCNN script above for to produce saved models.
 
+UAV2SEN_CrispEndMembersCNN will train a fuzzy class model with the desk-based polygons digitised by a user. the script assumes that the user digitised pure class areas and will assign a 100% membership score of the appropriate class to each digitised pixel.  This information is then used to train the same CNN architecture as above. 
+
 Each script has an equivalent script to use a Dense Nerual Network (no 2D convolution layer) to accomplish the same task.  All script has a long list of adjustable parameters detailed with comments at the start in the user inputs section.
 
 ### Step 2: Large Scale Deployment
