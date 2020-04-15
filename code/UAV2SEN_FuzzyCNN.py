@@ -42,19 +42,19 @@ from IPython import get_ipython
 #############################################################
 
 '''Folder Settgings'''
-MainData = 'F:\\UAV2SEN\\MLdata\\Fulldata_4xnoise'  #main data output from UAV2SEN_MakeCrispTensor.py. no extensions, will be fleshed out below
-SiteList = 'F:\\UAV2SEN\\Results\\Experiments\\SiteList_exp1.csv'#this has the lists of sites with name, month, year and 1s and 0s to identify training and validation sites
-DataFolder = 'F:\\UAV2SEN\\FinalTif\\'  #location of processed tif files
-ModelName = 'D_7_512_1B'  #Name and location of the final model to be saved in DataFolder. Add .h5 extension
+MainData = 'EMPTY'  #main data output from UAV2SEN_MakeCrispTensor.py. no extensions, will be fleshed out below
+SiteList = 'EMPTY'#this has the lists of sites with name, month, year and 1s and 0s to identify training and validation sites
+DataFolder = 'EMPTY' #location of processed tif files
+ModelName = 'EMPTY' #Name and location of the final model to be saved in DataFolder. Add .h5 extension
 
 '''Model Features and Labels'''
-FeatureSet = ['B2','B3','B4','B8'] # pick predictor bands from: ['B1','B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12']
+FeatureSet = ['B2','B3','B4','B5','B6','B7','B8','B9','B11','B12'] # pick predictor bands from: ['B2','B3','B4','B5','B6','B7','B8','B9','B11','B12']
 LabelSet = ['WaterMem', 'VegMem','SedMem' ]
 
 '''CNN parameters'''
 TrainingEpochs = 200 #Use model tuning to adjust this and prevent overfitting
-Nfilters= 512
-size=7#size of the tensor tiles
+Nfilters= 32
+size=5#size of the tensor tiles
 LearningRate = 0.0005
 BatchSize=5000
 Chatty = 1 # set the verbosity of the model training. 
@@ -65,10 +65,10 @@ ModelTuning = False #Plot the history of the training losses.  Increase the Trai
 '''Validation Settings'''
 
 ShowValidation = False#if true fuzzy classified images of the validation sites will be displayed.  Warning: xpensive to compute.
-PublishHist = True#best quality historgams
+PublishHist = True#best quality histograms
 Ytop=6.5
-SaveName='F:\\UAV2SEN\\Results\\Experiments\\Hist_deep932a.png'
-OutDPI=600
+SaveName='EMPTY'
+OutDPI=1200
 Fname='Arial'
 Fsize=14
 Fweight='bold'
@@ -207,9 +207,9 @@ inShape = TrainingTensor.shape[1:]
  	# create model
 
 Estimator = Sequential()
-Estimator.add(Conv2D(Nfilters,3, data_format='channels_last', input_shape=inShape, activation=NAF))
-Estimator.add(Conv2D(Nfilters,3, activation=NAF))#tentative deep architecture. gives poor results!
-Estimator.add(Conv2D(Nfilters,3,  activation=NAF))
+Estimator.add(Conv2D(Nfilters,size, data_format='channels_last', input_shape=inShape, activation=NAF))
+#Estimator.add(Conv2D(Nfilters,3, activation=NAF))#tentative deep architectures.
+#Estimator.add(Conv2D(Nfilters,3,  activation=NAF))
 #Estimator.add(Conv2D(Nfilters,3, activation=NAF))
 Estimator.add(Flatten())
 Estimator.add(Dense(64, kernel_regularizer= regularizers.l2(0.001), kernel_initializer='normal', activation=NAF))
@@ -231,7 +231,7 @@ Estimator.summary()
 ###############################################################################
 """Data Splitting"""
 
-X_train, X_test, y_train, y_test = train_test_split(TrainingTensor, TrainingLabels, test_size=0.2, random_state=int(42*np.random.random(1)))
+X_train, X_test, y_train, y_test = train_test_split(TrainingTensor, TrainingLabels, test_size=0.0001, random_state=int(42*np.random.random(1)))
 
 
 if ModelTuning:
@@ -262,7 +262,7 @@ if ModelTuning:
     plt.plot(epochs, acc_values, 'ko', label = 'Training accuracy')
     plt.plot(epochs, val_acc_values, 'k', label = 'Validation accuracy')
     #plt.title('Training and Validation Accuracy')
-    plt.ylim(0.5, 0.9)
+    plt.ylim(0.5, 1.0)
     plt.xlabel('Epochs')
     plt.ylabel('Accuracy')
     plt.legend()
@@ -361,9 +361,12 @@ QPAdom = np.sum(np.abs(DominantErrors[:,0])<0.25)/len(DominantErrors[:,0])
 QPAsubdom = np.sum(np.abs(DominantErrors[:,1])<0.25)/len(DominantErrors[:,1])
 
 
-print('Validation mean error for DOMINANT class= ', str(np.mean(DominantErrors[:,0])))
+DominantErrors[:,0]
+
+#print('Validation mean error for DOMINANT class= ', str(np.mean(DominantErrors[:,0])))
 print('Validation abs. mean error for DOMINANT class= ', str(AbsMeandom))
-print('Validation QPA for the DOMINANT class= '+ str(QPAdom))
+print(np.median(DominantErrors[:,0]), np.var(DominantErrors[:,0]))
+#print('Validation QPA for the DOMINANT class= '+ str(QPAdom))
 print('Validation mean error for SUB-DOMINANT class= ', str(np.mean(DominantErrors[:,1])))
 print('Validation abs. mean error for SUB-DOMINANT class= ', str(AbsMeansubdom))
 print('Validation QPA for the SUB-DOMINANT class= '+ str(QPAsubdom))
@@ -397,7 +400,7 @@ if PublishHist:
 
 
 
-#else:
+else:
     #get_ipython().run_line_magic('matplotlib', 'qt')
     plt.figure()
     plt.subplot(1,2,1)
