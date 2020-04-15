@@ -9,8 +9,8 @@ __license__ = 'MIT'
 
 '''
 
-This script performs crisp classification of river corridor features with a CNN.  the script allows 
-the user to tune, train, validate and save CNN models.  The required inputs must be produced with the
+This script performs crisp classification of river corridor features with a DNN.  the script allows 
+the user to tune, train, validate and save DNN models.  The required inputs must be produced with the
 UAV2SEN_MakeCrispTensor.py script.
 
 '''
@@ -42,18 +42,18 @@ import os
 """User data input. Use the site template and list training and validation choices"""
 #########################################################################################
 '''Folder Settgings'''
-MainData = 'E:\\UAV2SEN\\MLdata\\FullData_4xnoise'  #main data output from UAV2SEN_MakeCrispTensor.py. no extensions, will be fleshed out below
-SiteList = 'E:\\UAV2SEN\\SiteList.csv'#this has the lists of sites with name, month, year and 1s and 0s to identify training and validation sites
-DataFolder = 'E:\\UAV2SEN\\FinalTif\\'  #location of processed tif files
-ModelName = 'TEST32'  #Name and location of the final model to be saved in DataFolder. Add .h5 extension
+MainData = 'EMPTY'  #main data output from UAV2SEN_MakeCrispTensor.py. no extensions, will be fleshed out below
+SiteList = 'EMPTY'#this has the lists of sites with name, month, year and 1s and 0s to identify training and validation sites
+DataFolder = 'EMPTY' #location of processed tif files
+ModelName = 'EMPTY'  #Name and location of the final model to be saved in DataFolder. Add .h5 extension
 
 '''Model Features and Labels'''
 UAVtrain = True #if true use the UAV class data to train the model, if false use desk-based data for training
 MajType= 'Pure' #Majority type. only used if UAVtrain or valid is true. The options are RelMaj (relative majority class), Maj (majority) and Pure (95% unanimous).
-FeatureSet = ['B1','B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12'] # pick predictor bands from: ['B1','B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12']
+FeatureSet = ['B2','B3','B4','B5','B6','B7','B8','B9','B11','B12'] # pick predictor bands from: ['B1','B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','B12']
 
 '''CNN parameters'''
-TrainingEpochs = 100#Use model tuning to adjust this and prevent overfitting
+TrainingEpochs = 200#Use model tuning to adjust this and prevent overfitting
 Nfilters = 4
 size=3#size of the tensor tiles
 KernelSize=3 # size of the convolution kernels
