@@ -169,6 +169,16 @@ else:
     ValidationLabels = ValidationDF.PolyClass
     ValidationTensor = np.compress(ValidationLabels>0,ValidationTensor, axis=0)
     ValidationLabels=ValidationLabels.loc[ValidationLabels>0]    
+
+
+#remove the 4x data augmentation in the validation data
+Data=np.asarray(range(0,len(ValidationLabels)))
+Valid=(Data%4)==0
+ValidationTensor = np.compress(Valid,ValidationTensor, axis=0)
+ValidationLabels=ValidationLabels[Valid]
+
+
+
 #check for empty dataframes and raise an error if found
 
 if (len(TrainingDF.index)==0):
