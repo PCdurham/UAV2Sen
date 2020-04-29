@@ -181,6 +181,11 @@ if (len(ValidationDF.index)==0):
 TrainingFeatures = np.squeeze(TrainingTensor[:,size//2,size//2,:])
 ValidationFeatures = np.squeeze(ValidationTensor[:,size//2, size//2,:])
 
+#remove the 4x data augmentation in the validation data
+Data=np.asarray(range(0,len(ValidationLabels)))
+Valid=(Data%4)==0
+ValidationFeatures=ValidationFeatures[Valid]
+ValidationLabels=ValidationLabels[Valid]
     
 #Check that tensor lengths match label lengths
 
