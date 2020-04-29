@@ -188,6 +188,12 @@ else:
 #Select the central pixel in each tensor tile and make a table for non-convolutional NN classification
 TrainingFeatures = np.squeeze(TrainingTensor[:,size//2,size//2,:])
 ValidationFeatures = np.squeeze(ValidationTensor[:,size//2, size//2,:]) 
+
+#remove the 4x data augmentation in the validation data
+Data=np.asarray(range(0,len(ValidationLabels)))
+Valid=(Data%4)==0
+ValidationFeatures=ValidationFeatures[Valid]
+ValidationLabels=ValidationLabels[Valid]
     
 #check for empty dataframes and raise an error if found
 
